@@ -1,0 +1,15 @@
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+pydantic==2.10.3
+SQLAlchemy==2.0.36
+watchdog==6.0.0
+Pillow==11.0.0
+opencv-python==4.10.0.84
+httpx==0.28.1
+qrcode[pil]==8.0
+python-dotenv==1.0.1
+python-multipart==0.0.19
+pytest==8.3.4
+# Optional RAW support. Install if your Python/Windows environment has a compatible wheel.
+# rawpy==0.23.1
+

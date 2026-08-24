@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>MomentLink Gallery</title>
+  <link rel="stylesheet" href="/css/gallery.css?v=20260824-school-26">
+</head>
+<body>
+  <header class="hero" id="hero">
+    <nav class="bar">
+      <div class="brand">MomentLink</div>
+      <div id="count" class="count">กำลังโหลด</div>
+    </nav>
+    <div class="hero-copy">
+      <p id="eventDate" class="eyebrow">Event Gallery</p>
+      <h1>MomentLink Gallery</h1>
+      <p id="heroSub" class="hero-sub">รูปภาพจากงานจะอัปเดตอัตโนมัติระหว่างที่ทีมถ่ายภาพกำลังทำงาน</p>
+      <div class="hero-actions">
+        <a href="#grid" class="button">ดูรูปทั้งหมด</a>
+        <a href="#find" id="findJump" class="button secondary" style="display:none">ค้นหารูปของฉัน</a>
+        <button id="shareJump" class="button secondary" onclick="copyShareText()">แชร์ลิงก์</button>
+        <button id="downloadLinks" class="button secondary" onclick="copyDownloadLinks()" style="display:none">คัดลอกลิงก์ดาวน์โหลด</button>
+        <button id="reportHero" class="button secondary" onclick="reportIssue()">แจ้งปัญหา</button>
+      </div>
+      <p id="creditHero" class="credit-line">ถ่ายภาพโดยทีมโสตโรงเรียน</p>
+    </div>
+    <div class="hero-stats" aria-label="สถานะของแกลเลอรี">
+      <div><span id="statPhotos">0</span><small>รูปพร้อมดู</small></div>
+      <div><span>QR</span><small>เปิดบนมือถือได้ทันที</small></div>
+      <div><span id="statMode">Live</span><small>อัปเดตจากงานจริง</small></div>
+    </div>
+    <aside class="screen-qr" aria-label="QR สำหรับเปิดแกลเลอรีบนมือถือ">
+      <div class="screen-qr-copy">
+        <span>Scan to save</span>
+        <strong>เปิดแกลเลอรีบนมือถือ</strong>
+      </div>
+      <img id="screenQr" alt="QR code สำหรับเปิดแกลเลอรี">
+    </aside>
+  </header>
+
+  <main class="wrap">
+    <section id="pinPanel" class="pin-panel" style="display:none">
+      <div>
+        <p class="eyebrow">Private Gallery</p>
+        <h2>ใส่ PIN เพื่อดูรูป</h2>
+        <p class="section-copy">Gallery นี้ถูกตั้งค่าเป็นส่วนตัวสำหรับงานโรงเรียน</p>
+      </div>
+      <form onsubmit="unlockGallery(event)" class="pin-form">
+        <input id="galleryPin" type="password" inputmode="numeric" placeholder="PIN">
+        <button>เปิด Gallery</button>
+      </form>
+    </section>
+
+    <section class="section-head">
+      <div>
+        <p class="eyebrow">Photos</p>
+        <h2>รูปภาพในงาน</h2>
+        <p class="section-copy">แตะรูปเพื่อดูขนาดใหญ่ ดาวน์โหลด หรือกลับมาดูใหม่จากลิงก์ QR เดิม</p>
+      </div>
+      <div class="toolbar">
+        <span id="syncState">อัปเดตอัตโนมัติ</span>
+        <button class="icon-button" onclick="loadPhotos(true)" title="โหลดรูปใหม่">รีเฟรช</button>
+      </div>
+    </section>
+
+    <section id="grid" class="grid" aria-live="polite">
+      <div class="empty">กำลังโหลดรูปภาพ</div>
+    </section>
+
+    <section class="mobile-qr-panel" aria-label="QR สำหรับเปิดแกลเลอรีบนมือถือ">
+      <div>
+        <p class="eyebrow">QR Gallery</p>
+        <h2>เปิดบนมือถือได้ทันที</h2>
+        <p class="section-copy">สแกน QR หรือคัดลอกลิงก์นี้เพื่อกลับมาดาวน์โหลดรูปภายหลัง</p>
+        <div id="mobileGalleryUrl" class="gallery-url"></div>
+        <div class="hero-actions mobile-actions">
+          <button class="button" onclick="copyShareText()">คัดลอกลิงก์</button>
+          <button class="button secondary dark" onclick="reportIssue()">แจ้งปัญหา</button>
+        </div>
+      </div>
+      <img id="mobileQr" alt="QR code สำหรับเปิดแกลเลอรี">
+    </section>
+
+    <section id="find" class="find" style="display:none">
+      <div>
+        <p class="eyebrow">Find My Photos</p>
+        <h2>ค้นหารูปของฉัน</h2>
+        <p>อัปโหลด selfie หนึ่งรูปเพื่อค้นหารูปที่มีใบหน้าของคุณในงานนี้ ระบบทดลองจะแจ้งสถานะจริงจาก backend ที่ตั้งค่าอยู่ตอนนี้</p>
+      </div>
+      <form onsubmit="findMyPhotos(event)" class="find-form">
+        <input id="selfie" type="file" accept="image/*">
+        <label class="consent"><input id="consent" type="checkbox"> ยินยอมให้ใช้รูปนี้ชั่วคราวเพื่อค้นหารูปใน event นี้</label>
+        <button>ค้นหา</button>
+      </form>
+      <p id="findResult" class="muted"></p>
+    </section>
+
+    <footer class="gallery-footer">
+      <strong id="creditFooter">ถ่ายภาพโดยทีมโสตโรงเรียน</strong>
+      <span id="reportFooter">พบปัญหารูปเสียหรือดาวน์โหลดไม่ได้ กด “แจ้งปัญหา” เพื่อคัดลอกรายละเอียดให้ทีมงาน</span>
+    </footer>
+  </main>
+
+  <div id="lightbox" class="modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
+  <script src="/js/gallery.js?v=20260824-school-26"></script>
+  <script>initGallery()</script>
+</body>
+</html>
+

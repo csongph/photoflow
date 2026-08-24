@@ -1,0 +1,38 @@
+{
+  "id": "272cf56084cd43a3ab18114d8a8e79a1",
+  "public_id": "pq5oPWE0riV7mVeNvDCZ5w9e4xe1B6L0",
+  "event": {
+    "name": "E2E Smoke",
+    "description": "",
+    "event_date": "",
+    "preset_id": "event_natural",
+    "processing_profile": "Balanced",
+    "auto_correction": {
+      "auto_exposure": true,
+      "auto_white_balance": true,
+      "highlight_recovery": true,
+      "shadow_recovery": true,
+      "face_aware_brightness": false,
+      "noise_reduction": false,
+      "sharpening": true
+    },
+    "gallery": {
+      "enable_gallery": true,
+      "allow_download": true,
+      "find_my_photos": true,
+      "instant_publish": true,
+      "review_before_publish": false,
+      "optional_pin": ""
+    },
+    "drive": {
+      "upload_finished_photos": false,
+      "upload_originals": false
+    }
+  },
+  "paths": {
+    "root": "local\\events\\E2E_Smoke_0ad45f61",
+    "incoming": "local\\events\\E2E_Smoke_0ad45f61\\INCOMING"
+  },
+  "gallery_url": "http://127.0.0.1:8000/gallery/pq5oPWE0riV7mVeNvDCZ5w9e4xe1B6L0",
+  "created_at": "2026-08-24T02:30:24.538320Z"
+}

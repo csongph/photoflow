@@ -1,0 +1,38 @@
+{
+  "id": "7af2f236940a4e38a5a8981d8a30bc86",
+  "public_id": "Hmk7QnPS5a4kdBdxdgRI0yUUnzcIexXU",
+  "event": {
+    "name": "studio miracle science Fahion week",
+    "description": "",
+    "event_date": "2026-08-24",
+    "preset_id": "event_natural",
+    "processing_profile": "Balanced",
+    "auto_correction": {
+      "auto_exposure": true,
+      "auto_white_balance": true,
+      "highlight_recovery": true,
+      "shadow_recovery": true,
+      "face_aware_brightness": true,
+      "noise_reduction": true,
+      "sharpening": true
+    },
+    "gallery": {
+      "enable_gallery": true,
+      "allow_download": true,
+      "find_my_photos": true,
+      "instant_publish": true,
+      "review_before_publish": false,
+      "optional_pin": ""
+    },
+    "drive": {
+      "upload_finished_photos": true,
+      "upload_originals": false
+    }
+  },
+  "paths": {
+    "root": "local\\events\\studio_miracle_science_Fahion_week_923bc747",
+    "incoming": "local\\events\\studio_miracle_science_Fahion_week_923bc747\\INCOMING"
+  },
+  "gallery_url": "http://127.0.0.1:8000/gallery/Hmk7QnPS5a4kdBdxdgRI0yUUnzcIexXU",
+  "created_at": "2026-08-24T02:45:06.654307Z"
+}

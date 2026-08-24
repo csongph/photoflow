@@ -1,0 +1,38 @@
+{
+  "id": "6b65a7bb9acc48c38b071979023992e9",
+  "public_id": "VKOKUxjg_gCdMuDVVVCV7FNPZd8A6_kB",
+  "event": {
+    "name": "Stress 50",
+    "description": "",
+    "event_date": "",
+    "preset_id": "event_natural",
+    "processing_profile": "Balanced",
+    "auto_correction": {
+      "auto_exposure": true,
+      "auto_white_balance": true,
+      "highlight_recovery": true,
+      "shadow_recovery": true,
+      "face_aware_brightness": false,
+      "noise_reduction": false,
+      "sharpening": true
+    },
+    "gallery": {
+      "enable_gallery": true,
+      "allow_download": true,
+      "find_my_photos": true,
+      "instant_publish": true,
+      "review_before_publish": false,
+      "optional_pin": ""
+    },
+    "drive": {
+      "upload_finished_photos": false,
+      "upload_originals": false
+    }
+  },
+  "paths": {
+    "root": "local\\events\\Stress_50_8559f833",
+    "incoming": "local\\events\\Stress_50_8559f833\\INCOMING"
+  },
+  "gallery_url": "http://127.0.0.1:8000/gallery/VKOKUxjg_gCdMuDVVVCV7FNPZd8A6_kB",
+  "created_at": "2026-08-24T02:30:35.754272Z"
+}
