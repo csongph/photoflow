@@ -21,6 +21,10 @@
     {
       "source": "/",
       "destination": "/gallery/index.html"
+    },
+    {
+      "source": "/:path*",
+      "destination": "/gallery/index.html"
     }
   ],
   "headers": [
