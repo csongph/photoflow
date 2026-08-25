@@ -12,6 +12,7 @@ from sqlalchemy import and_, select
 from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
+from ..sync.cloud import sync_photo
 from ..uploader.storage import env_provider
 
 log = logging.getLogger("photoflow")
@@ -180,6 +181,8 @@ class JobWorker:
                 else:
                     photo.status = "AWAITING_REVIEW"
         db.commit()
+        if event and photo and upload.variant == "finished":
+            sync_photo(event, photo)
 
     def _publish_photo(self, db, job: Job) -> None:
         event = db.get(Event, job.event_id)
@@ -204,6 +207,7 @@ class JobWorker:
         photo.hidden = False
         photo.status = "PUBLISHED"
         db.commit()
+        sync_photo(event, photo)
 
     def _required_uploads_done(self, db, photo_id: str) -> bool:
         uploaded = {

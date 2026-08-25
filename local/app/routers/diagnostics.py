@@ -22,16 +22,23 @@ from ..watcher.service import watcher_manager
 router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 
 REQUIRED_PACKAGES = ["fastapi", "uvicorn", "sqlalchemy", "watchdog", "PIL", "qrcode"]
-OPTIONAL_PACKAGES = ["cv2", "rawpy"]
+OPTIONAL_PACKAGES = {
+    "cv2": "optional: needed only for offline face search",
+    "rawpy": "optional: needed only when importing RAW camera files",
+}
 
 
 def check(status: str, message: str, required: bool = True) -> dict:
     return {"status": status, "message": message, "required": required}
 
 
-def package_status(name: str, required: bool) -> dict:
+def package_status(name: str, required: bool, optional_message: str = "optional package") -> dict:
     found = importlib.util.find_spec(name) is not None
-    return check("OK" if found else ("FAIL" if required else "OPTIONAL"), "installed" if found else "not installed", required)
+    if found:
+        return check("OK", "installed", required)
+    if required:
+        return check("FAIL", "not installed", required)
+    return check("OPTIONAL", optional_message, False)
 
 
 def can_write(path: Path) -> bool:
@@ -91,8 +98,8 @@ def diagnostics(db: Session = Depends(get_db)):
 
     for package in REQUIRED_PACKAGES:
         rows[f"package_{package}"] = package_status(package, True)
-    for package in OPTIONAL_PACKAGES:
-        rows[f"package_{package}"] = package_status(package, False)
+    for package, message in OPTIONAL_PACKAGES.items():
+        rows[f"package_{package}"] = package_status(package, False, message)
 
     try:
         internet_response = httpx.get("https://www.googleapis.com/generate_204", timeout=3)
@@ -106,7 +113,7 @@ def diagnostics(db: Session = Depends(get_db)):
         except Exception as exc:
             rows["cloud_api"] = check("WARN", f"unreachable: {exc}", False)
     else:
-        rows["cloud_api"] = check("OPTIONAL", "not configured", False)
+        rows["cloud_api"] = check("OPTIONAL", "not configured: local mode can run without cloud API", False)
     google_connected = bool(db.get(Setting, "google_refresh_token") and db.get(Setting, "google_refresh_token").value)
     google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET"))
     rows["google_drive"] = check(
@@ -115,7 +122,7 @@ def diagnostics(db: Session = Depends(get_db)):
         False,
     )
     rows["face_engine"] = check("OK" if importlib.util.find_spec("cv2") else "OPTIONAL", "OpenCV available" if importlib.util.find_spec("cv2") else "offline face engine unavailable", False)
-    rows["watcher"] = check("OK" if event and event.id in watcher_manager.observers else "OPTIONAL", "watching active event" if event and event.id in watcher_manager.observers else "idle", False)
+    rows["watcher"] = check("OK" if event and event.id in watcher_manager.observers else "OPTIONAL", "watching active event" if event and event.id in watcher_manager.observers else "idle: start an event to watch INCOMING", False)
     rows["local_server"] = check("OK", f"{settings.local_host}:{settings.local_port}", True)
 
     queues = {

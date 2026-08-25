@@ -7,6 +7,8 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://postgres:postgres@localhost:5432/photoflow")
+if DATABASE_URL.startswith("postgresql://"):
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
 
 
 class Base(DeclarativeBase):
@@ -23,4 +25,3 @@ def get_db():
         yield db
     finally:
         db.close()
-

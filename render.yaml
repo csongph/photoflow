@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: momentlink-cloud
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: CLOUD_SYNC_TOKEN
+        generateValue: true
+      - key: PUBLIC_GALLERY_BASE_URL
+        sync: false

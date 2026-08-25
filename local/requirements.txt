@@ -10,6 +10,4 @@ qrcode[pil]==8.0
 python-dotenv==1.0.1
 python-multipart==0.0.19
 pytest==8.3.4
-# Optional RAW support. Install if your Python/Windows environment has a compatible wheel.
-# rawpy==0.23.1
-
+rawpy==0.23.1

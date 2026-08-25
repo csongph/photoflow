@@ -216,27 +216,65 @@ async function loadSettings() {
   const settings = await api("/api/settings");
   const google = await api("/api/google/status");
   const rootOptions = await api("/api/settings/event-root-options");
-  layout("settings", `<div class="top hero-panel"><div><p class="kicker">System Configuration</p><h1>Settings</h1></div></div><form id="settingsForm" class="panel" style="max-width:760px">
-    <h2>General</h2><label><span>Event Root</span><input id="eventRootInput" name="event_root" value="${settings.event_root || ""}"></label><div class="folder-options">${rootOptions.options.map(o => `<button type="button" class="${o.recommended ? "" : "secondary"} ${o.writable ? "" : "disabled"}" ${o.writable ? `onclick='setEventRootOption(${jsArg(o.path)})'` : "disabled"}><span>${o.label}</span><small>${o.path}${o.writable ? "" : " · ใช้ไม่ได้: ไม่มีสิทธิ์สร้าง/เขียน"}</small></button>`).join("")}</div><div class="row" style="margin:10px 0 14px"><button type="button" class="secondary" onclick="chooseEventRoot()">Browse Folder</button><button type="button" onclick="verifyEventRoot()">Use This Folder</button></div><p id="eventRootStatus" class="muted">เลือกโฟลเดอร์ด้านบน หรือวาง path เอง แล้วกด Use This Folder เพื่อบันทึกจริง</p><div class="local-browser"><div class="preview-head"><div><h2>Local Folder Browser</h2><p class="muted">อ่าน drive และโฟลเดอร์จากเครื่องนี้จริง กดเข้าโฟลเดอร์แล้วเลือกเป็นที่เก็บงานได้ทันที</p></div><button type="button" class="secondary" onclick="loadLocalFolders('')">Drives</button></div><div id="localFolderBrowser"></div></div><label><span>Public Gallery Base URL</span><input name="public_gallery_base_url" value="${settings.public_gallery_base_url || ""}"></label>
-    <h2>Workers</h2><label><span>Worker Count</span><input name="worker_count" type="number" min="1" max="6" value="${settings.worker_count || 2}"></label>
-    <h2>Export</h2><label><span>JPEG Quality</span><input name="jpeg_quality" type="number" min="70" max="98" value="${settings.jpeg_quality || 90}"></label>
-    <h2>Cloud</h2><label><span>API URL</span><input name="cloud_api_url" value="${settings.cloud_api_url || ""}"></label>
-    <h2>Google Drive</h2><label><span>Root Folder</span><input name="drive_root" value="${google.root_folder || "MomentLink Events"}"></label>
-    <button>Save Settings</button></form>
-    <section class="panel" style="max-width:760px;margin-top:16px">
-      <h2>Google Drive Connection</h2>
-      <div class="queue-line"><span>OAuth Config</span><b>${google.configured ? "READY" : "MISSING"}</b></div>
-      <div class="queue-line"><span>Connection</span><b>${google.connected ? "CONNECTED" : "NOT CONNECTED"}</b></div>
-      <div class="queue-line"><span>Ready Uploads</span><b>${google.ready_to_upload}</b></div>
-      <div class="queue-line"><span>Uploaded</span><b>${google.uploaded}</b></div>
-      <p class="muted">Redirect URI: ${google.redirect_uri || "not set"}</p>
-      <div class="row">
-        <a class="button" href="/api/google/connect">Connect Google Drive</a>
-        <button class="secondary" onclick="retryGoogleUploads()">Retry Ready Uploads</button>
-        <button class="bad" onclick="disconnectGoogle()">Disconnect</button>
+  const publicUrl = settings.public_gallery_base_url || "";
+  const urlMode = publicUrl.includes("127.0.0.1") || publicUrl.includes("localhost")
+    ? "Local only"
+    : publicUrl.startsWith("http://192.168.") || publicUrl.startsWith("http://10.") || publicUrl.startsWith("http://172.")
+      ? "LAN"
+      : "Public";
+  layout("settings", `<div class="top hero-panel"><div><p class="kicker">System Configuration</p><h1>Settings</h1><p class="hero-note">ตั้งค่าก่อนเริ่มงานจริง: โฟลเดอร์เก็บรูป, QR/แกลเลอรี่, Google Drive และกำลังประมวลผล</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">Ready Check</a><button class="secondary" onclick="loadSettings()">Refresh</button></div></div>
+  <form id="settingsForm" class="settings-page">
+    <section class="settings-summary span-12">
+      <div class="summary-tile"><span>Event Root</span><b>${html(settings.event_root || "ยังไม่ได้ตั้งค่า")}</b><small>ที่เก็บงานใหม่ในเครื่อง</small></div>
+      <div class="summary-tile"><span>Gallery URL</span><b>${urlMode}</b><small>${html(publicUrl || "ยังไม่ได้ตั้งค่า")}</small></div>
+      <div class="summary-tile"><span>Google Drive</span><b>${google.connected ? "Connected" : google.configured ? "Ready" : "Missing"}</b><small>${google.connected ? "พร้อมอัปโหลดไฟล์ดาวน์โหลด" : "เชื่อมต่อเพื่อให้ผู้ใช้โหลดรูปได้จริง"}</small></div>
+      <div class="summary-tile"><span>Export</span><b>Q${settings.jpeg_quality || 90}</b><small>${settings.worker_count || 2} worker(s)</small></div>
+    </section>
+
+    <section class="panel settings-card span-7">
+      <div class="settings-card-head"><div><p class="kicker">Storage</p><h2>โฟลเดอร์เก็บงาน</h2><p class="muted">อีเวนต์ใหม่จะสร้าง INCOMING, ORIGINAL, PREVIEWS, THUMBNAILS และ FINISHED ใต้โฟลเดอร์นี้</p></div><button type="button" class="secondary" onclick="chooseEventRoot()">Browse</button></div>
+      <label><span>Event Root</span><input id="eventRootInput" name="event_root" value="${html(settings.event_root || "")}"></label>
+      <div class="row"><button type="button" onclick="verifyEventRoot()">Verify & Save Folder</button><button type="button" class="secondary" onclick="loadLocalFolders('')">Browse in Page</button></div>
+      <p id="eventRootStatus" class="settings-hint">เลือกโฟลเดอร์ที่มีสิทธิ์เขียน แล้วกด Verify & Save Folder</p>
+      <div class="folder-options">${rootOptions.options.map(o => `<button type="button" class="${o.recommended ? "" : "secondary"} ${o.writable ? "" : "disabled"}" ${o.writable ? `onclick='setEventRootOption(${jsArg(o.path)})'` : "disabled"}><span>${html(o.label)}</span><small>${html(o.path)}${o.writable ? "" : " · ใช้ไม่ได้: ไม่มีสิทธิ์สร้าง/เขียน"}</small></button>`).join("")}</div>
+      <div class="local-browser"><div class="preview-head"><div><h2>Local Folder Browser</h2><p class="muted">เลือก drive หรือโฟลเดอร์จากเครื่องนี้จริง</p></div><button type="button" class="secondary" onclick="loadLocalFolders('')">Drives</button></div><div id="localFolderBrowser"></div></div>
+    </section>
+
+    <section class="panel settings-card span-5">
+      <div class="settings-card-head"><div><p class="kicker">Guest Access</p><h2>ลิงก์แกลเลอรี่ / QR</h2><p class="muted">QR ทุกงานจะใช้ค่า Base URL นี้ ถ้าดีพรอยให้ใส่โดเมนจริง</p></div><span class="status pill">${urlMode}</span></div>
+      <label><span>Public Gallery Base URL</span><input name="public_gallery_base_url" value="${html(publicUrl)}" placeholder="https://photo.school.ac.th/gallery"></label>
+      <div class="pathbox">ตัวอย่างลิงก์งาน: ${html((publicUrl || "https://your-domain.com/gallery").replace(/\/$/, ""))}/EVENT_ID</div>
+      <p class="settings-hint">ทดสอบใน Wi-Fi ใช้ LAN IP ได้ แต่ใช้งานผ่านอินเทอร์เน็ตต้องเป็นโดเมนที่เปิดจากมือถือภายนอกได้</p>
+    </section>
+
+    <section class="panel settings-card span-5">
+      <div class="settings-card-head"><div><p class="kicker">Downloads</p><h2>Google Drive</h2><p class="muted">ใช้เก็บไฟล์ finished สำหรับให้ผู้ใช้ดาวน์โหลดจริง</p></div><span class="status pill">${google.connected ? "CONNECTED" : "NOT CONNECTED"}</span></div>
+      <label><span>Drive Root Folder</span><input name="drive_root" value="${html(google.root_folder || "MomentLink Events")}"></label>
+      <div class="settings-list">
+        <div><span>OAuth Config</span><b>${google.configured ? "READY" : "MISSING"}</b></div>
+        <div><span>Ready Uploads</span><b>${google.ready_to_upload}</b></div>
+        <div><span>Uploaded</span><b>${google.uploaded}</b></div>
       </div>
-      ${google.configured ? "" : `<p class="muted">ใส่ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET และ GOOGLE_REDIRECT_URI ใน .env แล้ว restart MomentLink ก่อนเชื่อมต่อ</p>`}
-    </section>`);
+      <p class="muted">Redirect URI: ${html(google.redirect_uri || "not set")}</p>
+      <div class="row"><a class="button" href="/api/google/connect">Connect</a><button type="button" class="secondary" onclick="retryGoogleUploads()">Retry Uploads</button><button type="button" class="bad" onclick="disconnectGoogle()">Disconnect</button></div>
+      ${google.configured ? "" : `<p class="settings-hint badtext">ใส่ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET และ GOOGLE_REDIRECT_URI ใน .env แล้ว restart MomentLink ก่อนเชื่อมต่อ</p>`}
+    </section>
+
+    <section class="panel settings-card span-7">
+      <div class="settings-card-head"><div><p class="kicker">Performance</p><h2>Export & Worker</h2><p class="muted">ระบบไม่แต่งรูปอัตโนมัติ ส่วนนี้ควบคุมคุณภาพ JPEG และจำนวนงานที่ทำพร้อมกัน</p></div></div>
+      <div class="settings-fields">
+        <label><span>JPEG Quality</span><input name="jpeg_quality" type="number" min="70" max="98" value="${settings.jpeg_quality || 90}"></label>
+        <label><span>Worker Count</span><input name="worker_count" type="number" min="1" max="6" value="${settings.worker_count || 2}"></label>
+      </div>
+      <label><span>Cloud API URL</span><input name="cloud_api_url" value="${html(settings.cloud_api_url || "")}" placeholder="เว้นว่างได้ถ้ายังไม่ใช้ cloud worker"></label>
+      <p class="settings-hint">แนะนำเริ่มที่ JPEG 90 และ 2 workers ถ้าเครื่องเริ่มหน่วงค่อยลด worker ลง</p>
+    </section>
+
+    <section class="panel settings-save span-12">
+      <div><h2>บันทึกการตั้งค่า</h2><p class="muted">บันทึกค่าทั้งหมดในหน้านี้ อีเวนต์ใหม่จะใช้ค่าล่าสุดทันที</p></div>
+      <button>Save All Settings</button>
+    </section>
+  </form>`);
   $("#settingsForm").addEventListener("submit", async e => {
     e.preventDefault();
     await api("/api/settings", { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(e.target))) });
@@ -432,7 +470,12 @@ async function loadDiagnostics() {
   renderDiagnostics(data);
 }
 function renderDiagnostics(data) {
-  $("#checks").innerHTML = Object.entries(data.checks).map(([k,v]) => `<div class="queue-line"><span>${k.replaceAll("_"," ")}<br><small class="muted">${v.message}</small></span><b class="${v.status === "FAIL" ? "badtext" : ""}">${v.status}</b></div>`).join("");
+  $("#checks").innerHTML = Object.entries(data.checks).map(([k,v]) => {
+    const label = k.replace(/^package_/, "package: ").replaceAll("_"," ");
+    const tone = v.status === "FAIL" ? "badtext" : v.status === "WARN" ? "warntext" : v.status === "OPTIONAL" ? "optionaltext" : "";
+    const required = v.required ? "Required" : "Optional";
+    return `<div class="queue-line diag-line"><span><b>${label}</b><br><small class="muted">${html(v.message)}</small></span><span class="diag-status"><small>${required}</small><b class="${tone}">${v.status}</b></span></div>`;
+  }).join("");
   $("#diagQueues").innerHTML = Object.entries(data.queues).map(([k,v]) => `<div class="queue-line"><span>${k.replaceAll("_"," ")}</span><b>${v}</b></div>`).join("");
   $("#diagDb").innerHTML = Object.entries(data.database || {}).map(([k,v]) => `<div class="queue-line"><span>${k.replaceAll("_"," ")}</span><b>${v}</b></div>`).join("");
 }

@@ -5448,3 +5448,5 @@ RuntimeError: Storage provider is not configured; upload will retry after setup.
 2026-08-24 20:23:48,851 INFO photoflow MomentLink local started
 2026-08-24 20:29:51,742 INFO photoflow MomentLink local started
 2026-08-24 20:31:06,039 INFO photoflow MomentLink local started
+2026-08-25 08:29:47,406 INFO photoflow MomentLink local started
+2026-08-25 08:40:43,999 INFO photoflow MomentLink local started

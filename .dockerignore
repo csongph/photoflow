@@ -1,0 +1,17 @@
+.env
+.venv
+__pycache__
+*.pyc
+.pytest_cache
+.git
+.agents
+.codex
+local
+testระบบ
+tools
+*.db
+*.sqlite
+*.sqlite3
+local/data
+local/logs
+local/events

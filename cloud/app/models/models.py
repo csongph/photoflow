@@ -57,6 +57,8 @@ class GallerySettings(Base):
     allow_download: Mapped[bool] = mapped_column(Boolean, default=True)
     find_my_photos: Mapped[bool] = mapped_column(Boolean, default=True)
     auto_refresh: Mapped[bool] = mapped_column(Boolean, default=True)
+    credit_text: Mapped[str] = mapped_column(String(220), default="")
+    report_contact: Mapped[str] = mapped_column(String(220), default="")
 
 
 class SyncJob(Base):
@@ -87,4 +89,3 @@ class FaceSearchSession(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 Index("ix_photo_faces_event_photo", PhotoFace.event_id, PhotoFace.photo_id)
-

@@ -7,4 +7,4 @@ from cloud.app.main import app
 
 
 def test_app_exists():
-    assert app.title == "PhotoFlow Cloud"
+    assert app.title == "MomentLink Cloud"

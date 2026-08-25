@@ -1,5 +1,6 @@
 const params = new URLSearchParams(location.search);
-const API = params.get("api") || location.origin;
+const configuredApi = window.MOMENTLINK_API_URL || "";
+const API = (params.get("api") || configuredApi || location.origin).replace(/\/$/, "");
 const publicId = location.pathname.split("/").filter(Boolean).pop() || params.get("event") || "";
 let page = 1;
 let knownPhotoCount = 0;

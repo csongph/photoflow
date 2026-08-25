@@ -17,6 +17,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import Event, Job, Photo, Setting, Upload
 from ..schemas.local import EventCreate, EventOut
+from ..sync.cloud import sync_event, sync_photo
 from ..utils.files import atomic_json, safe_slug, sha256_file
 from ..utils.local_paths import ensure_event_root
 from ..utils.public_url import public_gallery_url
@@ -276,6 +277,7 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
         },
     )
     make_qr(db, event)
+    sync_event(event)
     return to_out(db, event)
 
 
@@ -352,6 +354,7 @@ def update_gallery_settings(event_id: str, payload: dict[str, str], db: Session 
     settings["report_contact"] = str(payload.get("report_contact") or "").strip()
     event.gallery_json = json.dumps(settings)
     db.commit()
+    sync_event(event)
     return {"ok": True, "gallery": settings}
 
 
@@ -467,6 +470,7 @@ def publish_photo(event_id: str, photo_id: str, db: Session = Depends(get_db)):
     photo.status = "PUBLISHED"
     photo.error = ""
     db.commit()
+    sync_photo(event, photo)
     return {"ok": True, "photo_id": photo.id, "published": True}
 
 
@@ -489,6 +493,7 @@ def publish_all_photos(event_id: str, db: Session = Depends(get_db)):
         photo.hidden = False
         photo.status = "PUBLISHED"
         photo.error = ""
+        sync_photo(event, photo)
         published += 1
     db.commit()
     return {"ok": True, "published": published, "blocked": blocked}
@@ -506,6 +511,7 @@ def update_photo_visibility(event_id: str, photo_id: str, payload: dict[str, boo
     elif can_publish_from_disk(photo):
         photo.status = "AWAITING_REVIEW" if gallery_settings(photo.event).get("review_before_publish") else "PROCESSED"
     db.commit()
+    sync_photo(photo.event, photo)
     return {"ok": True, "photo_id": photo.id, "hidden": photo.hidden}
 
 
