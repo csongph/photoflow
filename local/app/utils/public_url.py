@@ -7,6 +7,8 @@ from ..models import Setting
 
 
 def public_gallery_base_url(db: Session) -> str:
+    if settings.cloud_api_url and settings.public_gallery_base_url:
+        return settings.public_gallery_base_url.rstrip("/")
     row = db.get(Setting, "public_gallery_base_url")
     value = row.value if row and row.value else settings.public_gallery_base_url
     return value.rstrip("/")

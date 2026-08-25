@@ -81,6 +81,9 @@ def folder_row(path: Path) -> dict:
 
 @router.get("")
 def get_settings(db: Session = Depends(get_db)):
+    env_locked_keys = set()
+    if settings.cloud_api_url:
+        env_locked_keys.update({"cloud_api_url", "public_gallery_base_url"})
     values = {
         "event_root": str(event_root_path(db)),
         "cloud_api_url": settings.cloud_api_url,
@@ -90,7 +93,7 @@ def get_settings(db: Session = Depends(get_db)):
         "default_profile": "Balanced",
     }
     secret_keys = {"google_refresh_token", "google_oauth_state"}
-    values.update({row.key: row.value for row in db.query(Setting).all() if row.key not in secret_keys})
+    values.update({row.key: row.value for row in db.query(Setting).all() if row.key not in secret_keys and row.key not in env_locked_keys})
     return values
 
 
