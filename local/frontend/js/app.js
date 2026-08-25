@@ -1,6 +1,15 @@
 const $ = (q) => document.querySelector(q);
 const jsArg = (value) => JSON.stringify(String(value ?? ""));
 const html = (value) => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
+const publicGalleryExample = (baseUrl) => {
+  try {
+    const url = new URL(baseUrl || "https://your-domain.com/");
+    url.searchParams.set("event", "EVENT_ID");
+    return url.toString();
+  } catch {
+    return `${String(baseUrl || "https://your-domain.com").replace(/\/$/, "")}/EVENT_ID`;
+  }
+};
 const api = (url, opts = {}) => fetch(url, { headers: { "Content-Type": "application/json" }, ...opts }).then(async r => {
   if (r.status === 401) {
     location.href = "/login";
@@ -242,8 +251,8 @@ async function loadSettings() {
 
     <section class="panel settings-card span-5">
       <div class="settings-card-head"><div><p class="kicker">Guest Access</p><h2>ลิงก์แกลเลอรี่ / QR</h2><p class="muted">QR ทุกงานจะใช้ค่า Base URL นี้ ถ้าดีพรอยให้ใส่โดเมนจริง</p></div><span class="status pill">${urlMode}</span></div>
-      <label><span>Public Gallery Base URL</span><input name="public_gallery_base_url" value="${html(publicUrl)}" placeholder="https://photo.school.ac.th/gallery"></label>
-      <div class="pathbox">ตัวอย่างลิงก์งาน: ${html((publicUrl || "https://your-domain.com/gallery").replace(/\/$/, ""))}/EVENT_ID</div>
+      <label><span>Public Gallery Base URL</span><input name="public_gallery_base_url" value="${html(publicUrl)}" placeholder="https://photo.school.ac.th/"></label>
+      <div class="pathbox">ตัวอย่างลิงก์งาน: ${html(publicGalleryExample(publicUrl))}</div>
       <p class="settings-hint">ทดสอบใน Wi-Fi ใช้ LAN IP ได้ แต่ใช้งานผ่านอินเทอร์เน็ตต้องเป็นโดเมนที่เปิดจากมือถือภายนอกได้</p>
     </section>
 
