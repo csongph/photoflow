@@ -4,6 +4,7 @@ import os
 import secrets
 import tempfile
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -26,6 +27,11 @@ def public_gallery_url(public_id: str, request: Request | None = None) -> str:
     base = os.getenv("PUBLIC_GALLERY_BASE_URL", "").rstrip("/")
     if not base:
         base = f"{request_base_url(request)}/gallery" if request else "/gallery"
+    if base.startswith(("http://", "https://")):
+        parts = urlsplit(base)
+        query = dict(parse_qsl(parts.query, keep_blank_values=True))
+        query["event"] = public_id
+        return urlunsplit((parts.scheme, parts.netloc, parts.path or "/", urlencode(query), parts.fragment))
     return f"{base}/{public_id}"
 
 
