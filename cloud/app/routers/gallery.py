@@ -4,10 +4,11 @@ import os
 import secrets
 import tempfile
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
+import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 import qrcode
 
@@ -43,6 +44,10 @@ def drive_preview_url(file_id: str, size: int = 1600) -> str:
     return f"https://drive.google.com/thumbnail?id={file_id}&sz=w{size}"
 
 
+def photo_download_url(request: Request, public_id: str, photo_id: str) -> str:
+    return f"{request_base_url(request)}/api/gallery/{public_id}/photos/{photo_id}/download"
+
+
 def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str:
     if variant.storage_provider == "google_drive":
         kind = requested_kind or variant.kind
@@ -52,7 +57,7 @@ def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str
     return variant.storage_object_id
 
 
-def variants_for_photo(db: Session, photo: Photo) -> list[dict]:
+def variants_for_photo(db: Session, photo: Photo, download_url: str = "") -> list[dict]:
     rows = db.query(PhotoVariant).filter(PhotoVariant.photo_id == photo.id).all()
     by_kind = {row.kind: row for row in rows}
     finished = by_kind.get("finished")
@@ -63,7 +68,8 @@ def variants_for_photo(db: Session, photo: Photo) -> list[dict]:
     for kind in ["thumbnail", "preview", "finished"]:
         variant = by_kind.get(kind)
         if variant:
-            result.append({"kind": kind, "url": variant_url(variant, kind), "drive_id": variant.storage_object_id if variant.storage_provider == "google_drive" else ""})
+            url = download_url if kind == "finished" and download_url else variant_url(variant, kind)
+            result.append({"kind": kind, "url": url, "drive_id": variant.storage_object_id if variant.storage_provider == "google_drive" else ""})
     return result
 
 
@@ -96,12 +102,78 @@ def gallery_qr(public_id: str, request: Request):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).offset((page - 1) * page_size).limit(min(page_size, 100)).all()
-    return [{"id": p.id, "filename": p.filename, "variants": variants_for_photo(db, p)} for p in rows]
+    return [
+        {
+            "id": p.id,
+            "filename": p.filename,
+            "variants": variants_for_photo(db, p, photo_download_url(request, public_id, p.id)),
+        }
+        for p in rows
+    ]
+
+
+@router.get("/{public_id}/photos/{photo_id}/download")
+async def download_photo(public_id: str, photo_id: str, db: Session = Depends(get_db)):
+    photo = (
+        db.query(Photo)
+        .join(Event, Event.id == Photo.event_id)
+        .filter(
+            Event.public_id == public_id,
+            Photo.id == photo_id,
+            Photo.published == True,
+            Photo.hidden == False,
+        )
+        .first()
+    )
+    if not photo:
+        raise HTTPException(404, "Photo not found")
+    settings = db.get(GallerySettings, photo.event_id)
+    if settings and not settings.allow_download:
+        raise HTTPException(403, "Downloads are disabled")
+    finished = db.query(PhotoVariant).filter(
+        PhotoVariant.photo_id == photo.id,
+        PhotoVariant.kind == "finished",
+    ).first()
+    if not finished or finished.storage_provider != "google_drive" or not finished.storage_object_id:
+        raise HTTPException(404, "Download file not found")
+
+    client = httpx.AsyncClient(follow_redirects=True, timeout=60)
+    try:
+        upstream = await client.send(
+            client.build_request("GET", drive_download_url(finished.storage_object_id)),
+            stream=True,
+        )
+    except httpx.HTTPError as exc:
+        await client.aclose()
+        raise HTTPException(502, "Cannot connect to file storage") from exc
+    if upstream.status_code >= 400:
+        await upstream.aclose()
+        await client.aclose()
+        raise HTTPException(502, "Cannot download file from storage")
+
+    async def stream_file():
+        try:
+            async for chunk in upstream.aiter_bytes():
+                yield chunk
+        finally:
+            await upstream.aclose()
+            await client.aclose()
+
+    filename = quote(photo.filename, safe="")
+    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+    content_length = upstream.headers.get("content-length")
+    if content_length:
+        headers["Content-Length"] = content_length
+    return StreamingResponse(
+        stream_file(),
+        media_type=upstream.headers.get("content-type", "application/octet-stream"),
+        headers=headers,
+    )
 
 
 @router.get("/{public_id}/downloads")
@@ -114,7 +186,7 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
     for photo in rows:
         finished = db.query(PhotoVariant).filter(PhotoVariant.photo_id == photo.id, PhotoVariant.kind == "finished").first()
         if finished:
-            links.append({"filename": photo.filename, "url": variant_url(finished)})
+            links.append({"filename": photo.filename, "url": photo_download_url(request, public_id, photo.id)})
     return {"event": event.name, "gallery_url": public_gallery_url(event.public_id, request), "links": links}
 
 
