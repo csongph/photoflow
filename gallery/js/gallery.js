@@ -198,8 +198,53 @@ function openLightbox(index) {
   const modal = document.querySelector("#lightbox");
   const safeName = escapeHtml(photo.filename);
   const position = `${index + 1} / ${galleryPhotos.length}`;
-  modal.innerHTML = `<div class="lightbox"><div class="lightbox-top"><div><div class="lightbox-title">${safeName}</div><div class="lightbox-count">${position}</div></div><button class="button secondary" onclick="closeLightbox()">ปิด</button></div><div class="lightbox-stage"><button class="nav-photo prev" onclick="moveLightbox(-1)" aria-label="รูปก่อนหน้า">‹</button><img src="${photo.preview}" alt="${safeName}"><button class="nav-photo next" onclick="moveLightbox(1)" aria-label="รูปถัดไป">›</button></div><div class="actions"><a class="button" href="${photo.finished}" download>ดาวน์โหลดรูปนี้</a><button class="button secondary" onclick="reportIssue()">แจ้งรูปเสีย</button></div></div>`;
+  const ios = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  const saveLabel = ios ? "บันทึกลงรูปภาพ" : "ดาวน์โหลดรูปนี้";
+  modal.innerHTML = `<div class="lightbox"><div class="lightbox-top"><div><div class="lightbox-title">${safeName}</div><div class="lightbox-count">${position}</div></div><button class="button secondary" onclick="closeLightbox()">ปิด</button></div><div class="lightbox-stage"><button class="nav-photo prev" onclick="moveLightbox(-1)" aria-label="รูปก่อนหน้า">‹</button><img src="${photo.preview}" alt="${safeName}"><button class="nav-photo next" onclick="moveLightbox(1)" aria-label="รูปถัดไป">›</button></div><div class="actions"><button id="savePhotoButton" class="button" onclick="savePhoto(${index})">${saveLabel}</button><button class="button secondary" onclick="reportIssue()">แจ้งรูปเสีย</button></div></div>`;
   modal.classList.add("open");
+}
+
+async function savePhoto(index) {
+  const photo = galleryPhotos[index];
+  if (!photo) return;
+  const button = document.querySelector("#savePhotoButton");
+  const originalLabel = button?.textContent || "ดาวน์โหลดรูปนี้";
+  if (button) {
+    button.disabled = true;
+    button.textContent = "กำลังเตรียมรูป...";
+  }
+  try {
+    const response = await fetch(photo.finished);
+    if (!response.ok) throw new Error(await response.text());
+    const blob = await response.blob();
+    const file = new File([blob], photo.filename, { type: blob.type || "image/jpeg" });
+    if (navigator.share && (!navigator.canShare || navigator.canShare({ files: [file] }))) {
+      await navigator.share({ files: [file], title: photo.filename });
+      return;
+    }
+    downloadBlob(blob, photo.filename);
+  } catch (err) {
+    if (err?.name !== "AbortError") {
+      console.error(err);
+      window.location.href = photo.finished;
+    }
+  } finally {
+    if (button?.isConnected) {
+      button.disabled = false;
+      button.textContent = originalLabel;
+    }
+  }
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 function moveLightbox(delta) {

@@ -51,10 +51,34 @@ class JobWorker:
     def start(self) -> None:
         if self.threads:
             return
+        self._recover_publish_jobs()
         for idx in range(self.worker_count):
             thread = threading.Thread(target=self._run, name=f"photoflow-worker-{idx}", daemon=True)
             thread.start()
             self.threads.append(thread)
+
+    def _recover_publish_jobs(self) -> None:
+        with SessionLocal() as db:
+            photos = db.query(Photo).filter(
+                Photo.published == False,
+                Photo.hidden == False,
+                Photo.status.in_(["PROCESSED", "AWAITING_REVIEW"]),
+                Photo.finished_path != "",
+            ).all()
+            for photo in photos:
+                event = db.get(Event, photo.event_id)
+                if not event or event.publishing_paused or not auto_publish_enabled(event):
+                    continue
+                if drive_required(event) and not self._required_uploads_done(db, photo.id):
+                    continue
+                pending = db.query(Job).filter(
+                    Job.photo_id == photo.id,
+                    Job.type == "PUBLISH_PHOTO",
+                    Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"]),
+                ).first()
+                if not pending:
+                    db.add(Job(event_id=event.id, photo_id=photo.id, type="PUBLISH_PHOTO", priority=70))
+            db.commit()
 
     def stop(self) -> None:
         self.stop_event.set()

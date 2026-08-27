@@ -179,6 +179,52 @@ def test_finished_upload_is_enough_for_manual_publish(tmp_path: Path):
         assert required_uploads_done(db, photo.id) is True
 
 
+def test_worker_recovers_uploaded_photo_for_auto_publish(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        event.drive_json = json.dumps({"upload_finished_photos": True})
+        photo = Photo(
+            event_id=event.id,
+            capture_id="recovery",
+            filename="recovery.jpg",
+            checksum="recovery-checksum",
+            status="PROCESSED",
+            finished_path=str(tmp_path / "FINISHED" / "recovery.jpg"),
+            preview_path=str(tmp_path / "PREVIEWS" / "recovery.jpg"),
+            thumbnail_path=str(tmp_path / "THUMBNAILS" / "recovery.jpg"),
+        )
+        db.add(photo)
+        db.flush()
+        db.add(Upload(
+            event_id=event.id,
+            photo_id=photo.id,
+            variant="finished",
+            local_path=photo.finished_path,
+            state="UPLOADED",
+            object_id="recovery-drive-id",
+        ))
+        db.commit()
+        photo_id = photo.id
+
+    worker = JobWorker(1)
+    worker._recover_publish_jobs()
+
+    with SessionLocal() as db:
+        recovered = db.query(Job).filter(
+            Job.photo_id == photo_id,
+            Job.type == "PUBLISH_PHOTO",
+            Job.state == "QUEUED",
+        ).all()
+        assert len(recovered) == 1
+
+    worker._recover_publish_jobs()
+
+    with SessionLocal() as db:
+        assert db.query(Job).filter(Job.photo_id == photo_id, Job.type == "PUBLISH_PHOTO").count() == 1
+
+
 def test_reprocess_with_existing_drive_uploads_requeues_publish(tmp_path: Path):
     reset_db()
     event = make_event(tmp_path)
