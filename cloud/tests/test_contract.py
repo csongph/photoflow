@@ -1,4 +1,5 @@
 import pytest
+from fastapi.testclient import TestClient
 
 pytestmark = pytest.mark.cloud
 
@@ -10,6 +11,13 @@ from cloud.app.routers.gallery import variant_url
 
 def test_app_exists():
     assert app.title == "MomentLink Cloud"
+
+
+def test_render_head_health_checks():
+    client = TestClient(app)
+
+    assert client.head("/").status_code == 200
+    assert client.head("/healthz").status_code == 200
 
 
 def test_finished_drive_file_uses_image_urls_for_derived_variants():

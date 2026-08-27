@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .routers import gallery, sync
@@ -27,6 +27,11 @@ def index():
     return {"ok": True, "service": "MomentLink Cloud", "gallery": "/gallery/{public_id}"}
 
 
+@app.head("/", include_in_schema=False)
+def index_head():
+    return Response(status_code=200)
+
+
 @app.get("/gallery/{public_id}")
 def gallery_page(public_id: str):
     return FileResponse(GALLERY_DIR / "index.html", headers={"Cache-Control": "no-store"})
@@ -35,3 +40,8 @@ def gallery_page(public_id: str):
 @app.get("/healthz")
 def healthz():
     return {"ok": True}
+
+
+@app.head("/healthz", include_in_schema=False)
+def healthz_head():
+    return Response(status_code=200)
