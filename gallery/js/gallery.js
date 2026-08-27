@@ -1,7 +1,8 @@
 const params = new URLSearchParams(location.search);
 const configuredApi = window.MOMENTLINK_API_URL || "";
 const API = (params.get("api") || configuredApi || location.origin).replace(/\/$/, "");
-const publicId = location.pathname.split("/").filter(Boolean).pop() || params.get("event") || "";
+const pathPublicId = location.pathname.split("/").filter(Boolean).pop() || "";
+const publicId = params.get("event") || (pathPublicId === "gallery" || pathPublicId === "index.html" ? "" : pathPublicId);
 let page = 1;
 let knownPhotoCount = 0;
 let loadingPhotos = false;

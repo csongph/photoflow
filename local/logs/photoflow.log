@@ -5452,3 +5452,28 @@ RuntimeError: Storage provider is not configured; upload will retry after setup.
 2026-08-25 08:40:43,999 INFO photoflow MomentLink local started
 2026-08-25 11:02:38,636 INFO photoflow MomentLink local started
 2026-08-25 11:17:11,274 INFO photoflow MomentLink local started
+2026-08-25 11:22:30,275 INFO photoflow MomentLink local started
+2026-08-25 11:28:00,501 INFO photoflow MomentLink local started
+2026-08-25 11:29:51,687 WARNING photoflow Cloud sync failed for /api/sync/event: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/event'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:07:10,910 INFO photoflow MomentLink local started
+2026-08-27 12:07:58,317 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:08:02,602 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:08:11,321 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:08:11,490 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:08:11,657 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:08:11,906 WARNING photoflow Cloud sync failed for /api/sync/event: The read operation timed out
+2026-08-27 12:10:20,145 WARNING photoflow Cloud sync failed for /api/sync/event: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/event'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:10:20,509 WARNING photoflow Cloud sync failed for /api/sync/photo: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/photo'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:10:24,240 WARNING photoflow Cloud sync failed for /api/sync/event: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/event'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:10:24,630 WARNING photoflow Cloud sync failed for /api/sync/photo: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/photo'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:10:30,243 WARNING photoflow Cloud sync failed for /api/sync/event: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/event'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:10:30,433 WARNING photoflow Cloud sync failed for /api/sync/photo: Client error '401 Unauthorized' for url 'https://photoflow-thcz.onrender.com/api/sync/photo'
+For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/401
+2026-08-27 12:20:58,278 INFO photoflow MomentLink local started
+2026-08-27 12:24:16,614 INFO photoflow MomentLink local started

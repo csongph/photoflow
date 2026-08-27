@@ -43,11 +43,12 @@ def drive_preview_url(file_id: str, size: int = 1600) -> str:
     return f"https://drive.google.com/thumbnail?id={file_id}&sz=w{size}"
 
 
-def variant_url(variant: PhotoVariant) -> str:
+def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str:
     if variant.storage_provider == "google_drive":
-        if variant.kind == "finished":
+        kind = requested_kind or variant.kind
+        if kind == "finished":
             return drive_download_url(variant.storage_object_id)
-        return drive_preview_url(variant.storage_object_id, 1600 if variant.kind == "preview" else 500)
+        return drive_preview_url(variant.storage_object_id, 1600 if kind == "preview" else 500)
     return variant.storage_object_id
 
 
@@ -62,7 +63,7 @@ def variants_for_photo(db: Session, photo: Photo) -> list[dict]:
     for kind in ["thumbnail", "preview", "finished"]:
         variant = by_kind.get(kind)
         if variant:
-            result.append({"kind": kind, "url": variant_url(variant), "drive_id": variant.storage_object_id if variant.storage_provider == "google_drive" else ""})
+            result.append({"kind": kind, "url": variant_url(variant, kind), "drive_id": variant.storage_object_id if variant.storage_provider == "google_drive" else ""})
     return result
 
 

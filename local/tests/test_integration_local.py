@@ -146,6 +146,39 @@ def test_drive_required_event_waits_for_uploads_before_publish(tmp_path: Path):
         assert db.query(Job).filter(Job.type == "PUBLISH_PHOTO").count() == 0
 
 
+def test_finished_upload_is_enough_for_manual_publish(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        event.drive_json = json.dumps({"upload_finished_photos": True})
+        photo = Photo(
+            event_id=event.id,
+            capture_id="capture",
+            filename="capture.jpg",
+            checksum="manual-publish-checksum",
+            status="PROCESSED",
+            finished_path=str(tmp_path / "FINISHED" / "capture.jpg"),
+            preview_path=str(tmp_path / "PREVIEWS" / "capture.jpg"),
+            thumbnail_path=str(tmp_path / "THUMBNAILS" / "capture.jpg"),
+        )
+        db.add(photo)
+        db.flush()
+        db.add(Upload(
+            event_id=event.id,
+            photo_id=photo.id,
+            variant="finished",
+            local_path=photo.finished_path,
+            state="UPLOADED",
+            object_id="drive-file-id",
+        ))
+        db.commit()
+
+        from local.app.routers.events import required_uploads_done
+
+        assert required_uploads_done(db, photo.id) is True
+
+
 def test_reprocess_with_existing_drive_uploads_requeues_publish(tmp_path: Path):
     reset_db()
     event = make_event(tmp_path)

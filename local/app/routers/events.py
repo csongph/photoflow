@@ -65,16 +65,12 @@ def can_publish_from_disk(photo: Photo) -> bool:
 
 
 def required_uploads_done(db: Session, photo_id: str) -> bool:
-    uploaded = {
-        upload.variant
-        for upload in db.query(Upload).filter(
-            Upload.photo_id == photo_id,
-            Upload.variant.in_(["thumbnail", "preview", "finished"]),
-            Upload.state == "UPLOADED",
-            Upload.object_id != "",
-        )
-    }
-    return {"thumbnail", "preview", "finished"}.issubset(uploaded)
+    return db.query(Upload).filter(
+        Upload.photo_id == photo_id,
+        Upload.variant == "finished",
+        Upload.state == "UPLOADED",
+        Upload.object_id != "",
+    ).first() is not None
 
 
 def ensure_photo(event_id: str, photo_id: str, db: Session) -> Photo:
