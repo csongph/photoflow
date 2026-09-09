@@ -7,7 +7,7 @@ from PIL import Image
 from PIL import ImageChops
 
 from local.app.database import Base, SessionLocal, engine, init_db
-from local.app.models import Event, Job, Photo, Upload
+from local.app.models import Event, Job, Photo, Setting, Upload
 from local.app.processing.pipeline import process_photo
 from local.app.queue.worker import JobWorker, recover_jobs
 from local.app.queue.worker import drive_filename
@@ -16,6 +16,7 @@ from local.app.routers.events import publish_photo, update_photo_visibility
 from local.app.routers.gallery import pin_ok
 from local.app.routers.gallery import photos as gallery_photos
 from local.app.utils.files import sha256_file
+from local.app.uploader.storage import GoogleAuthorizationExpired
 from local.app.watcher.service import IncomingHandler
 
 
@@ -409,6 +410,40 @@ def test_unconfigured_storage_marks_upload_ready_without_failure(tmp_path: Path)
         db.refresh(upload)
         db.refresh(job)
         assert upload.state == "READY_TO_UPLOAD"
+        assert job.state == "PROCESSED"
+
+
+def test_expired_google_token_disconnects_and_parks_upload(tmp_path: Path, monkeypatch):
+    reset_db()
+    event = make_event(tmp_path)
+    variant = Path(event.root_path) / "FINISHED" / "capture.jpg"
+    Image.new("RGB", (200, 100), "white").save(variant, "JPEG", quality=90)
+
+    class ExpiredProvider:
+        configured = True
+
+        def upload_file(self, local_path, remote_key, mime_type):
+            raise GoogleAuthorizationExpired("Google Drive authorization expired; reconnect Google Drive")
+
+    monkeypatch.setattr("local.app.queue.worker.env_provider", lambda refresh_token, root_folder: ExpiredProvider())
+    with SessionLocal() as db:
+        db.add(Setting(key="google_refresh_token", value="revoked-token"))
+        photo = Photo(event_id=event.id, capture_id="capture", filename="capture.jpg", original_path=str(variant), checksum=sha256_file(variant), file_size=variant.stat().st_size)
+        db.add(photo)
+        db.flush()
+        upload = Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=str(variant))
+        db.add(upload)
+        db.flush()
+        job = Job(event_id=event.id, photo_id=photo.id, type="UPLOAD_VARIANT", payload_json=json.dumps({"upload_id": upload.id}))
+        db.add(job)
+        db.commit()
+
+        assert JobWorker(1)._handle_one()
+        db.refresh(upload)
+        db.refresh(job)
+        assert db.get(Setting, "google_refresh_token").value == ""
+        assert upload.state == "READY_TO_UPLOAD"
+        assert "reconnect" in upload.error
         assert job.state == "PROCESSED"
 
 

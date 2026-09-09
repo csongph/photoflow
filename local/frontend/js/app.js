@@ -267,6 +267,7 @@ async function loadSettings() {
         <div><span>Uploaded</span><b>${google.uploaded}</b></div>
       </div>
       <p class="muted">Redirect URI: ${html(google.redirect_uri || "not set")}</p>
+      ${google.needs_reconnect ? `<p class="settings-hint badtext">สิทธิ์ Google Drive หมดอายุหรือยังไม่ได้เชื่อมต่อ กรุณากด Connect แล้วกด Retry Uploads เพื่อส่งรูปที่ค้าง</p>` : ""}
       <div class="row"><a class="button" href="/api/google/connect">Connect</a><button type="button" class="secondary" onclick="retryGoogleUploads()">Retry Uploads</button><button type="button" class="bad" onclick="disconnectGoogle()">Disconnect</button></div>
       ${google.configured ? "" : `<p class="settings-hint badtext">ใส่ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET และ GOOGLE_REDIRECT_URI ใน .env แล้ว restart MomentLink ก่อนเชื่อมต่อ</p>`}
     </section>

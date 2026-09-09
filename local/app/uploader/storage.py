@@ -17,6 +17,10 @@ DRIVE_UPLOAD_URL = "https://www.googleapis.com/upload/drive/v3/files?uploadType=
 DRIVE_PERMISSIONS_URL = "https://www.googleapis.com/drive/v3/files/{file_id}/permissions"
 
 
+class GoogleAuthorizationExpired(RuntimeError):
+    """Raised when Google has revoked or expired the stored refresh token."""
+
+
 class StorageProvider(Protocol):
     name: str
 
@@ -53,6 +57,12 @@ class GoogleDriveProvider:
                 },
             )
         if response.status_code >= 400:
+            try:
+                error_code = response.json().get("error", "")
+            except (ValueError, AttributeError):
+                error_code = ""
+            if error_code == "invalid_grant":
+                raise GoogleAuthorizationExpired("Google Drive authorization expired; reconnect Google Drive")
             raise RuntimeError(f"Google token refresh failed: {response.text[:500]}")
         return response.json()["access_token"]
 

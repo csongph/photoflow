@@ -43,6 +43,7 @@ def status(db: Session = Depends(get_db)):
         "ready_to_upload": ready,
         "uploaded": uploaded,
         "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", ""),
+        "needs_reconnect": not bool(refresh_token) and ready > 0,
     }
 
 
@@ -93,7 +94,7 @@ def callback(code: str = "", state: str = "", error: str = "", db: Session = Dep
     set_setting(db, "google_connected_at", datetime.utcnow().isoformat() + "Z")
     set_setting(db, "google_oauth_state", "")
     db.commit()
-    return HTMLResponse("<h1>Google Drive connected</h1><p>กลับไปที่ MomentLink Settings แล้วกด Retry Upload ได้เลย</p><p><a href='/settings'>Open Settings</a></p>")
+    return HTMLResponse("<h1>เชื่อมต่อ Google Drive สำเร็จ</h1><p>กลับไปหน้า Settings แล้วกด Retry Uploads เพื่อนำรูปที่ค้างกลับเข้าคิว</p><p><a href='/settings'>เปิด Settings</a></p>")
 
 
 @router.post("/disconnect")

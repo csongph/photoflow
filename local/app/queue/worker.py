@@ -13,7 +13,7 @@ from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
 from ..sync.cloud import enabled as cloud_sync_enabled, sync_event, sync_photo
-from ..uploader.storage import env_provider
+from ..uploader.storage import GoogleAuthorizationExpired, env_provider
 
 log = logging.getLogger("photoflow")
 
@@ -187,7 +187,17 @@ class JobWorker:
         remote_key = drive_filename(event, upload)
         upload.state = "UPLOADING"
         db.commit()
-        result = provider.upload_file(Path(upload.local_path), remote_key, "")
+        try:
+            result = provider.upload_file(Path(upload.local_path), remote_key, "")
+        except GoogleAuthorizationExpired as exc:
+            token_setting = db.get(Setting, "google_refresh_token")
+            if token_setting:
+                token_setting.value = ""
+            upload.state = "READY_TO_UPLOAD"
+            upload.error = str(exc)
+            db.commit()
+            log.warning("Google Drive authorization expired; uploads paused until reconnect")
+            return
         upload.state = "UPLOADED"
         upload.object_id = result["id"]
         upload.error = ""
