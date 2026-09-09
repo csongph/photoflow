@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 class GallerySettings(BaseModel):
     enable_gallery: bool = True
     allow_download: bool = True
-    find_my_photos: bool = True
+    find_my_photos: bool = False
     instant_publish: bool = True
     review_before_publish: bool = False
     optional_pin: str = ""
@@ -15,7 +15,7 @@ class GallerySettings(BaseModel):
 
 
 class DriveSettings(BaseModel):
-    upload_finished_photos: bool = False
+    upload_finished_photos: bool = True
     upload_originals: bool = False
 
 

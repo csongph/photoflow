@@ -61,14 +61,6 @@
 - [ ] เปิด preview/lightbox
 - [ ] Download image ถ้าเปิด allow download
 
-## Find My Photos
-
-- [ ] ถ้า face engine/cloud face search configured แล้ว ให้ upload selfie พร้อม consent
-- [ ] ตรวจว่า zero-face image ตอบข้อความที่ปลอดภัย
-- [ ] ตรวจว่า one-face image คืน possible matches
-- [ ] ตรวจว่า multiple-face image ให้ user เลือก face
-- [ ] ตรวจว่า temporary upload ไม่ถูกเพิ่มเข้า gallery หรือ Drive
-
 ## Final Hardware Status
 
 - [ ] ยังถือว่า `NEEDS REAL HARDWARE TEST` จนกว่าจะทดสอบทุกข้อด้านบนกับกล้อง/tether setup จริงครบ

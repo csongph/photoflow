@@ -17,7 +17,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import Event, Job, Photo, Setting, Upload
 from ..schemas.local import EventCreate, EventOut
-from ..sync.cloud import sync_event, sync_photo
+from ..sync.cloud import CloudSyncError, delete_cloud_event, enabled as cloud_sync_enabled
 from ..utils.files import atomic_json, safe_slug, sha256_file
 from ..utils.local_paths import ensure_event_root
 from ..utils.public_url import public_gallery_url
@@ -31,6 +31,17 @@ EVENT_DIRS = ["INCOMING", "ORIGINAL", "PROCESSING", "FINISHED", "THUMBNAILS", "P
 
 def gallery_url(db: Session, public_id: str) -> str:
     return public_gallery_url(db, public_id)
+
+
+def enqueue_unique_job(db: Session, event_id: str, job_type: str, photo_id: str | None = None, priority: int = 60) -> None:
+    pending = db.query(Job).filter(
+        Job.event_id == event_id,
+        Job.photo_id == photo_id,
+        Job.type == job_type,
+        Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"]),
+    ).first()
+    if not pending:
+        db.add(Job(event_id=event_id, photo_id=photo_id, type=job_type, priority=priority))
 
 
 def to_out(db: Session, event: Event) -> EventOut:
@@ -136,20 +147,20 @@ def import_finished_photos(db: Session, event: Event) -> int:
         thumb = root / "THUMBNAILS" / f"{finished.stem}.jpg"
         preview = root / "PREVIEWS" / f"{finished.stem}.jpg"
         original = root / "ORIGINAL" / finished.name
-        db.add(Photo(
+        photo = Photo(
             event_id=event.id,
             capture_id=finished.stem,
             filename=finished.name,
-            original_path=str(original) if original.exists() else "",
-            finished_path=str(finished),
-            thumbnail_path=str(thumb) if thumb.exists() else "",
-            preview_path=str(preview) if preview.exists() else "",
+            original_path=str(original) if original.exists() else str(finished),
             checksum=checksum,
             file_size=finished.stat().st_size,
             mime_type="image/jpeg",
-            status="PROCESSED",
-            published=True,
-        ))
+            status="QUEUED",
+            published=False,
+        )
+        db.add(photo)
+        db.flush()
+        db.add(Job(event_id=event.id, photo_id=photo.id, type="PROCESS_PHOTO", priority=20))
         count += 1
     return count
 
@@ -273,7 +284,9 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
         },
     )
     make_qr(db, event)
-    sync_event(event)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+        db.commit()
     return to_out(db, event)
 
 
@@ -349,8 +362,9 @@ def update_gallery_settings(event_id: str, payload: dict[str, str], db: Session 
     settings["credit_text"] = str(payload.get("credit_text") or "ถ่ายภาพโดยทีมโสตโรงเรียน").strip()
     settings["report_contact"] = str(payload.get("report_contact") or "").strip()
     event.gallery_json = json.dumps(settings)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
     db.commit()
-    sync_event(event)
     return {"ok": True, "gallery": settings}
 
 
@@ -370,6 +384,12 @@ def delete_event(event_id: str, delete_files: bool = Query(False), db: Session =
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
+
+    if cloud_sync_enabled():
+        try:
+            delete_cloud_event(event.public_id, strict=True)
+        except CloudSyncError as exc:
+            raise HTTPException(502, f"ยังลบ Gallery ออนไลน์ไม่ได้ กรุณาตรวจ Cloud แล้วลองใหม่: {exc}") from exc
 
     watcher_manager.stop_event(event.id)
     root = Path(event.root_path).resolve()
@@ -415,6 +435,8 @@ def open_event_folder(event_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{event_id}/simulate-photo")
 def simulate_photo(event_id: str, db: Session = Depends(get_db)):
+    if os.getenv("ENABLE_DEMO_TOOLS", "false").strip().lower() != "true":
+        raise HTTPException(404, "Demo tools are disabled")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -465,8 +487,9 @@ def publish_photo(event_id: str, photo_id: str, db: Session = Depends(get_db)):
     photo.hidden = False
     photo.status = "PUBLISHED"
     photo.error = ""
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_PHOTO", photo.id, 60)
     db.commit()
-    sync_photo(event, photo)
     return {"ok": True, "photo_id": photo.id, "published": True}
 
 
@@ -489,7 +512,8 @@ def publish_all_photos(event_id: str, db: Session = Depends(get_db)):
         photo.hidden = False
         photo.status = "PUBLISHED"
         photo.error = ""
-        sync_photo(event, photo)
+        if cloud_sync_enabled():
+            enqueue_unique_job(db, event.id, "SYNC_PHOTO", photo.id, 60)
         published += 1
     db.commit()
     return {"ok": True, "published": published, "blocked": blocked}
@@ -506,8 +530,9 @@ def update_photo_visibility(event_id: str, photo_id: str, payload: dict[str, boo
         photo.status = "PUBLISHED"
     elif can_publish_from_disk(photo):
         photo.status = "AWAITING_REVIEW" if gallery_settings(photo.event).get("review_before_publish") else "PROCESSED"
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, photo.event_id, "SYNC_PHOTO", photo.id, 60)
     db.commit()
-    sync_photo(photo.event, photo)
     return {"ok": True, "photo_id": photo.id, "hidden": photo.hidden}
 
 
@@ -570,6 +595,7 @@ def retry_failed_job(event_id: str, job_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Job not found")
     job.state = "RETRYING"
     job.error = ""
+    job.attempts = 0
     job.available_at = datetime.utcnow()
     db.commit()
     return {"ok": True}
@@ -581,6 +607,7 @@ def retry_all_failed_jobs(event_id: str, db: Session = Depends(get_db)):
     for job in db.query(Job).filter(Job.event_id == event_id, Job.state == "FAILED").all():
         job.state = "RETRYING"
         job.error = ""
+        job.attempts = 0
         job.available_at = datetime.utcnow()
         count += 1
     db.commit()

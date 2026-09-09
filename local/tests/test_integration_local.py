@@ -11,7 +11,7 @@ from local.app.models import Event, Job, Photo, Upload
 from local.app.processing.pipeline import process_photo
 from local.app.queue.worker import JobWorker, recover_jobs
 from local.app.queue.worker import drive_filename
-from local.app.routers.events import delete_event
+from local.app.routers.events import delete_event, import_finished_photos, retry_failed_job
 from local.app.routers.events import publish_photo, update_photo_visibility
 from local.app.routers.gallery import pin_ok
 from local.app.routers.gallery import photos as gallery_photos
@@ -342,7 +342,7 @@ def test_gallery_uses_local_media_for_display_and_drive_for_download(tmp_path: P
         variants = {item["kind"]: item for item in rows[0]["variants"]}
         assert variants["thumbnail"]["url"].startswith(f"/media/{event.id}/THUMBNAILS/")
         assert variants["preview"]["url"].startswith(f"/media/{event.id}/PREVIEWS/")
-        assert variants["finished"]["url"] == "https://drive.google.com/uc?export=download&id=finished-drive-id"
+        assert variants["finished"]["url"].startswith(f"/api/gallery/{event.public_id}/photos/{photo.id}/download")
 
 
 def test_drive_upload_name_is_flat_inside_root_folder(tmp_path: Path):
@@ -363,8 +363,9 @@ def test_gallery_optional_pin():
     assert not pin_ok(event, "")
 
 
-def test_delete_event_removes_database_rows_and_event_folder(tmp_path: Path):
+def test_delete_event_removes_database_rows_and_event_folder(tmp_path: Path, monkeypatch):
     reset_db()
+    monkeypatch.setattr("local.app.routers.events.cloud_sync_enabled", lambda: False)
     event = make_event(tmp_path)
     marker = Path(event.root_path) / "event.json"
     marker.write_text("{}", encoding="utf-8")
@@ -411,6 +412,75 @@ def test_unconfigured_storage_marks_upload_ready_without_failure(tmp_path: Path)
         assert job.state == "PROCESSED"
 
 
+def test_successful_drive_upload_queues_auto_publish(tmp_path: Path, monkeypatch):
+    reset_db()
+    event = make_event(tmp_path)
+    variant = Path(event.root_path) / "FINISHED" / "capture.jpg"
+    Image.new("RGB", (200, 100), "white").save(variant, "JPEG", quality=90)
+
+    class FakeProvider:
+        name = "google_drive"
+        configured = True
+
+        def upload_file(self, local_path, remote_key, mime_type):
+            return {"id": "uploaded-drive-id"}
+
+    monkeypatch.setattr("local.app.queue.worker.env_provider", lambda refresh_token, root_folder: FakeProvider())
+    monkeypatch.setattr("local.app.queue.worker.sync_photo", lambda event, photo, **kwargs: True)
+
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        event.drive_json = json.dumps({"upload_finished_photos": True})
+        photo = Photo(
+            event_id=event.id,
+            capture_id="capture",
+            filename="capture.jpg",
+            original_path=str(variant),
+            finished_path=str(variant),
+            preview_path=str(variant),
+            thumbnail_path=str(variant),
+            checksum=sha256_file(variant),
+            file_size=variant.stat().st_size,
+            status="PROCESSED",
+        )
+        db.add(photo)
+        db.flush()
+        upload = Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=str(variant))
+        db.add(upload)
+        db.flush()
+        db.add(Job(
+            event_id=event.id,
+            photo_id=photo.id,
+            type="UPLOAD_VARIANT",
+            payload_json=json.dumps({"upload_id": upload.id}),
+        ))
+        db.commit()
+        photo_id = photo.id
+
+    worker = JobWorker(1)
+    assert worker._handle_one()
+
+    with SessionLocal() as db:
+        upload = db.query(Upload).filter(Upload.photo_id == photo_id).one()
+        publish_jobs = db.query(Job).filter(
+            Job.photo_id == photo_id,
+            Job.type == "PUBLISH_PHOTO",
+            Job.state == "QUEUED",
+        ).all()
+        assert upload.state == "UPLOADED"
+        assert upload.object_id == "uploaded-drive-id"
+        assert len(publish_jobs) == 1
+
+    assert worker._handle_one()
+
+    with SessionLocal() as db:
+        photo = db.get(Photo, photo_id)
+        publish_job = db.query(Job).filter(Job.photo_id == photo_id, Job.type == "PUBLISH_PHOTO").one()
+        assert photo.published is True
+        assert photo.status == "PUBLISHED"
+        assert publish_job.state == "PROCESSED"
+
+
 def test_recover_jobs_requeues_in_progress(tmp_path: Path):
     reset_db()
     event = make_event(tmp_path)
@@ -421,3 +491,39 @@ def test_recover_jobs_requeues_in_progress(tmp_path: Path):
     recover_jobs()
     with SessionLocal() as db:
         assert {job.state for job in db.query(Job).all()} == {"RETRYING"}
+
+
+def test_imported_finished_photo_enters_real_processing_queue(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    source = Path(event.root_path) / "FINISHED" / "imported.jpg"
+    Image.new("RGB", (320, 200), "white").save(source, "JPEG", quality=90)
+
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        assert import_finished_photos(db, event) == 1
+        db.commit()
+
+        photo = db.query(Photo).one()
+        job = db.query(Job).one()
+        assert photo.original_path == str(source)
+        assert photo.status == "QUEUED"
+        assert photo.published is False
+        assert job.type == "PROCESS_PHOTO"
+        assert job.photo_id == photo.id
+
+
+def test_retry_failed_job_resets_attempt_budget(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    with SessionLocal() as db:
+        job = Job(event_id=event.id, type="SYNC_EVENT", state="FAILED", attempts=5, error="network")
+        db.add(job)
+        db.commit()
+
+        result = retry_failed_job(event.id, job.id, db=db)
+        db.refresh(job)
+        assert result["ok"]
+        assert job.state == "RETRYING"
+        assert job.attempts == 0
+        assert job.error == ""

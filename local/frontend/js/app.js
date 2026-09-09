@@ -1,5 +1,9 @@
 const $ = (q) => document.querySelector(q);
-const jsArg = (value) => JSON.stringify(String(value ?? ""));
+const jsArg = (value) => JSON.stringify(String(value ?? ""))
+  .replaceAll("&", "\\u0026")
+  .replaceAll("'", "\\u0027")
+  .replaceAll("<", "\\u003c")
+  .replaceAll(">", "\\u003e");
 const html = (value) => String(value ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[ch]));
 const publicGalleryExample = (baseUrl) => {
   try {
@@ -68,20 +72,19 @@ async function loadDashboard() {
   $("#live").textContent = data.active_event.status;
   const c = data.counts;
   const metricLabels = { captured: "เข้าระบบ", processed: "พร้อมแสดง", uploaded: "อัปโหลด", published: "เผยแพร่", review: "รอตรวจ", queue: "คิวรอ", failed: "ผิดพลาด" };
-  $("#active").innerHTML = `<div class="event-title"><h1>${data.active_event.name}</h1><span class="status pill"><span class="dot"></span>${data.active_event.status}</span></div>
+  $("#active").innerHTML = `<div class="event-title"><h1>${html(data.active_event.name)}</h1><span class="status pill"><span class="dot"></span>${html(data.active_event.status)}</span></div>
     <div class="metrics">
       ${["captured","processed","uploaded","published","review","queue","failed"].map(k => `<div class="metric"><span class="muted">${metricLabels[k]}</span><b>${c[k] ?? 0}</b></div>`).join("")}
     </div>
-    <p class="muted">INCOMING Folder</p><div class="pathbox">${data.active_event.incoming_path}</div>
+    <p class="muted">INCOMING Folder</p><div class="pathbox">${html(data.active_event.incoming_path)}</div>
     <div class="row" style="margin-top:14px">
-      <button onclick="navigator.clipboard.writeText('${data.active_event.incoming_path.replaceAll("\\", "\\\\")}')">Copy Path</button>
-      <button class="secondary" onclick="openFolder('${data.active_event.id}')">Open Folder</button>
-      <button class="secondary" onclick="showQr('${data.active_event.id}', '${data.active_event.gallery_url}')">Show QR</button>
-      <button class="secondary" onclick="shareGallery('${data.active_event.gallery_url}', '${data.active_event.name}')">Share Gallery</button>
-      <button class="secondary" onclick="simulate('${data.active_event.id}')">Simulate Photo</button>
-      <button class="secondary" onclick="rebuildPhotos('${data.active_event.id}')">Rebuild Gallery Files</button>
-      <button class="warn" onclick="pause('${data.active_event.id}')">${data.active_event.publishing_paused ? "Resume Publishing" : "Pause Publishing"}</button>
-      <button class="bad" onclick="endEvent('${data.active_event.id}')">End Event</button>
+      <button onclick='navigator.clipboard.writeText(${jsArg(data.active_event.incoming_path)})'>Copy Path</button>
+      <button class="secondary" onclick='openFolder(${jsArg(data.active_event.id)})'>Open Folder</button>
+      <button class="secondary" onclick='showQr(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.gallery_url)})'>Show QR</button>
+      <button class="secondary" onclick='shareGallery(${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Share Gallery</button>
+      <button class="secondary" onclick='rebuildPhotos(${jsArg(data.active_event.id)})'>Rebuild Gallery Files</button>
+      <button class="warn" onclick='pause(${jsArg(data.active_event.id)})'>${data.active_event.publishing_paused ? "Resume Publishing" : "Pause Publishing"}</button>
+      <button class="bad" onclick='endEvent(${jsArg(data.active_event.id)})'>End Event</button>
       <button class="bad" onclick='deleteEvent(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.name)}, true, "dashboard")'>Delete Event</button>
     </div><div id="qrslot"></div>`;
   $("#health").innerHTML = Object.entries(data.health).map(([k,v]) => `<div class="queue-line"><span>${k}</span><b>${v}</b></div>`).join("");
@@ -104,7 +107,6 @@ async function shareGallery(url, name) {
   await navigator.clipboard.writeText(text);
   alert("คัดลอกข้อความสำหรับส่ง LINE/กลุ่มโรงเรียนแล้ว");
 }
-async function simulate(id) { await api(`/api/events/${id}/simulate-photo`, { method: "POST" }); setTimeout(loadDashboard, 1200); }
 async function rebuildPhotos(id) {
   if (!confirm("สร้างไฟล์ Gallery ใหม่จาก ORIGINAL ทั้งหมด?")) return;
   const result = await api(`/api/events/${id}/photos/reprocess`, { method: "POST" });
@@ -139,7 +141,7 @@ async function loadEvents() {
     <label><span>Description</span><textarea name="description"></textarea></label>
     <label><span>Date</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>ระบบไม่แต่งรูปอัตโนมัติ</b><br><span>รูปจะถูกสำรองเป็น ORIGINAL แล้ว export เป็น FINISHED/PREVIEW/THUMBNAIL สำหรับ Gallery และ Google Drive โดยไม่ปรับสีหรือแสง</span></div>
-    <h2>Gallery</h2><div class="checks">${["enable_gallery","allow_download","find_my_photos"].map(k => `<label class="check"><input type="checkbox" name="${k}" checked>${k.replaceAll("_"," ")}</label>`).join("")}<label class="check"><input type="checkbox" name="instant_publish" checked disabled>auto publish</label></div>
+    <h2>Gallery</h2><div class="checks">${["enable_gallery","allow_download"].map(k => `<label class="check"><input type="checkbox" name="${k}" checked>${k.replaceAll("_"," ")}</label>`).join("")}<label class="check"><input type="checkbox" name="instant_publish" checked disabled>auto publish</label></div>
     <label><span>Optional PIN</span><input name="optional_pin"></label>
     <label><span>Gallery Credit</span><input name="credit_text" value="ถ่ายภาพโดยทีมโสตโรงเรียน"></label>
     <label><span>Report Contact</span><input name="report_contact" placeholder="LINE @school-av หรืออีเมลทีมงาน"></label>
@@ -152,7 +154,7 @@ async function loadEvents() {
 
 async function renderEvents() {
   const events = await api("/api/events");
-  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${e.name}<br><small class="muted">${e.status}</small></span><span class="row"><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>Start</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
+  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${html(e.name)}<br><small class="muted">${html(e.status)}</small></span><span class="row"><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>Start</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
 }
 
 async function loadImportableEvents() {
@@ -184,7 +186,7 @@ async function createEvent(ev) {
   const checked = (k) => f.get(k) === "on";
   const payload = {
     name: f.get("name"), description: f.get("description"), event_date: f.get("event_date"),
-    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download","find_my_photos"].map(k => [k, checked(k)])), { instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "ถ่ายภาพโดยทีมโสตโรงเรียน", report_contact: f.get("report_contact") || "" }),
+    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "ถ่ายภาพโดยทีมโสตโรงเรียน", report_contact: f.get("report_contact") || "" }),
     drive: { upload_finished_photos: checked("upload_finished_photos"), upload_originals: checked("upload_originals") }
   };
   const event = await api("/api/events", { method: "POST", body: JSON.stringify(payload) });
@@ -380,7 +382,7 @@ async function disconnectGoogle() {
 }
 
 function loadGalleryPreview() {
-  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Photo Review</p><h1>Gallery Control</h1><p class="hero-note">คัดรูปจากข้อมูลจริงในเครื่องก่อนให้แขกเห็น: publish, hide/show และ rebuild ไฟล์ Gallery ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">Open Guest Gallery</a><button class="secondary" onclick="loadGalleryPreview()">Refresh</button></div></div><section class="panel"><div class="preview-head"><div><h2>Guest Page Settings</h2><p class="muted">ข้อความเครดิตและช่องทางแจ้งปัญหาจะแสดงในฝั่งผู้ใช้</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>Gallery Credit</span><input name="credit_text"></label><label><span>Report Contact</span><input name="report_contact" placeholder="LINE @school-av หรืออีเมลทีมงาน"></label><button type="submit">Save Guest Text</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>Review Queue</h2><p class="muted">รูปที่ Publish แล้วและไม่ถูกซ่อนเท่านั้นที่จะเห็นในฝั่งผู้ใช้</p></div><div class="row"><button id="publishAllBtn" type="button">Publish All Ready</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
+  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>Gallery Control</h1><p class="hero-note">รูปจะเผยแพร่อัตโนมัติหลังประมวลผลและอัปโหลด Google Drive สำเร็จ คุณยังซ่อน แสดง หรือสร้างไฟล์ใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">Open Guest Gallery</a><button class="secondary" onclick="loadGalleryPreview()">Refresh</button></div></div><section class="panel"><div class="preview-head"><div><h2>Guest Page Settings</h2><p class="muted">ข้อความเครดิตและช่องทางแจ้งปัญหาจะแสดงในฝั่งผู้ใช้</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>Gallery Credit</span><input name="credit_text"></label><label><span>Report Contact</span><input name="report_contact" placeholder="LINE @school-av หรืออีเมลทีมงาน"></label><button type="submit">Save Guest Text</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>Photo Status</h2><p class="muted">ไม่ต้องกด Publish รูปใหม่ ระบบจะนำขึ้น Gallery ให้เองเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
   api("/api/dashboard").then(d => {
     if (!d.active_event) {
       $("#publishAllBtn").disabled = true;
@@ -418,7 +420,7 @@ function renderPhotoReview(event, photos) {
   const review = ready.filter(p => !p.published && !p.hidden).length;
   const hidden = ready.filter(p => p.hidden).length;
   $("#gallerySummary").innerHTML = `<div class="mini-metrics"><div><b>${ready.length}</b><span>พร้อมดู</span></div><div><b>${published}</b><span>ผู้ใช้เห็น</span></div><div><b>${review}</b><span>รอตรวจ</span></div><div><b>${hidden}</b><span>ซ่อน</span></div></div>`;
-  $("#gallery").innerHTML = photos.map(p => photoReviewCard(event.id, p)).join("") || `<div class="empty-state"><b>ยังไม่มีรูปในระบบ</b><br><span>วางรูปจริงใน INCOMING หรือกด Simulate Photo แล้วรอ queue ประมวลผล</span></div>`;
+  $("#gallery").innerHTML = photos.map(p => photoReviewCard(event.id, p)).join("") || `<div class="empty-state"><b>ยังไม่มีรูปในระบบ</b><br><span>วางรูปจริงใน INCOMING แล้วระบบจะประมวลผล อัปโหลด และเผยแพร่ให้อัตโนมัติ</span></div>`;
 }
 
 function photoReviewCard(eventId, p) {

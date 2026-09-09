@@ -54,8 +54,9 @@ class PhotoVariant(Base):
 class GallerySettings(Base):
     __tablename__ = "gallery_settings"
     event_id: Mapped[str] = mapped_column(ForeignKey("events.id"), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     allow_download: Mapped[bool] = mapped_column(Boolean, default=True)
-    find_my_photos: Mapped[bool] = mapped_column(Boolean, default=True)
+    find_my_photos: Mapped[bool] = mapped_column(Boolean, default=False)
     auto_refresh: Mapped[bool] = mapped_column(Boolean, default=True)
     credit_text: Mapped[str] = mapped_column(String(220), default="")
     report_contact: Mapped[str] = mapped_column(String(220), default="")

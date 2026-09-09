@@ -15,7 +15,7 @@
 
 ```env
 DATABASE_URL=<Supabase connection string>
-PUBLIC_GALLERY_BASE_URL=https://your-vercel-project.vercel.app/gallery
+PUBLIC_GALLERY_BASE_URL=https://your-vercel-project.vercel.app
 CLOUD_SYNC_TOKEN=<สุ่มยาวๆ หรือใช้ค่าที่ Render generate>
 ```
 
@@ -41,7 +41,7 @@ Vercel จะใช้ `gallery/api/config.js` ส่งค่า backend URL �
 
 ```env
 CLOUD_API_URL=https://your-render-backend.onrender.com
-PUBLIC_GALLERY_BASE_URL=https://your-vercel-project.vercel.app/gallery
+PUBLIC_GALLERY_BASE_URL=https://your-vercel-project.vercel.app
 CLOUD_SYNC_TOKEN=<ค่าเดียวกับ Render>
 ```
 
@@ -52,7 +52,7 @@ CLOUD_SYNC_TOKEN=<ค่าเดียวกับ Render>
 QR จะใช้:
 
 ```text
-https://your-vercel-project.vercel.app/gallery/{public_id}
+https://your-vercel-project.vercel.app/?event={public_id}
 ```
 
 หน้า Vercel จะเรียก API ไป Render และ Render จะอ่านข้อมูลจาก Supabase

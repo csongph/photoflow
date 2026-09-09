@@ -3,7 +3,6 @@ const configuredApi = window.MOMENTLINK_API_URL || "";
 const API = (params.get("api") || configuredApi || location.origin).replace(/\/$/, "");
 const pathPublicId = location.pathname.split("/").filter(Boolean).pop() || "";
 const publicId = params.get("event") || (pathPublicId === "gallery" || pathPublicId === "index.html" ? "" : pathPublicId);
-let page = 1;
 let knownPhotoCount = 0;
 let loadingPhotos = false;
 let galleryUrl = location.href.split("#")[0];
@@ -57,13 +56,9 @@ async function initGallery() {
     document.querySelector("#statMode").textContent = meta.settings.allow_download ? "Download" : "View";
     document.querySelector("#downloadLinks").style.display = meta.settings.allow_download && !meta.settings.locked ? "inline-flex" : "none";
     document.querySelector("#pinPanel").style.display = meta.settings.locked ? "grid" : "none";
-    if (meta.settings.find_my_photos) {
-      document.querySelector("#find").style.display = "grid";
-      document.querySelector("#findJump").style.display = "inline-flex";
-    }
     if (!meta.settings.locked) await loadPhotos(true);
     setInterval(() => {
-      if (!document.hidden) loadPhotos(false);
+      if (!document.hidden) loadPhotos(currentPhotoIndex < 0);
     }, 20000);
   } catch (err) {
     document.querySelector("#grid").innerHTML = `<div class="empty"><div><b>เปิด Gallery ไม่ได้</b><br>ตรวจสอบลิงก์ QR หรือสถานะ event จากหน้า Dashboard</div></div>`;
@@ -149,7 +144,14 @@ async function loadPhotos(reset = false) {
   loadingPhotos = true;
   try {
     document.querySelector("#syncState").textContent = "กำลังอัปเดต";
-    const photos = await getJson(withPin(`${API}/api/gallery/${publicId}/photos?page=${page}`));
+    const photos = [];
+    let requestPage = 1;
+    let batch = [];
+    do {
+      batch = await getJson(withPin(`${API}/api/gallery/${publicId}/photos?page=${requestPage}&page_size=100`));
+      photos.push(...batch);
+      requestPage += 1;
+    } while (reset && batch.length === 100 && requestPage <= 50);
     const grid = document.querySelector("#grid");
     if (reset) {
       grid.innerHTML = "";
@@ -279,20 +281,3 @@ document.addEventListener("touchend", ev => {
     moveLightbox(dx < 0 ? 1 : -1);
   }
 }, { passive: true });
-
-async function findMyPhotos(ev) {
-  ev.preventDefault();
-  const consent = document.querySelector("#consent").checked;
-  if (!consent) {
-    alert("กรุณายินยอมก่อนอัปโหลดรูป");
-    return;
-  }
-  const file = document.querySelector("#selfie").files[0];
-  if (!file) return;
-  const form = new FormData();
-  form.append("file", file);
-  const pinParam = galleryPin ? `&pin=${encodeURIComponent(galleryPin)}` : "";
-  const res = await fetch(`${API}/api/gallery/${publicId}/find-my-photos?consent=true${pinParam}`, { method: "POST", body: form });
-  const body = await res.json();
-  document.querySelector("#findResult").textContent = body.message || "เริ่มค้นหาแล้ว";
-}

@@ -24,7 +24,7 @@ if GALLERY_DIR.exists():
 
 @app.get("/")
 def index():
-    return {"ok": True, "service": "MomentLink Cloud", "gallery": "/gallery/{public_id}"}
+    return {"ok": True, "service": "MomentLink Cloud", "gallery_api": "/api/gallery/{public_id}"}
 
 
 @app.head("/", include_in_schema=False)

@@ -12,13 +12,12 @@ from sqlalchemy import and_, select
 from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
-from ..sync.cloud import sync_photo
+from ..sync.cloud import enabled as cloud_sync_enabled, sync_event, sync_photo
 from ..uploader.storage import env_provider
 
 log = logging.getLogger("photoflow")
 
 
-TERMINAL = {"PROCESSED", "PUBLISHED", "FAILED"}
 REQUIRED_GALLERY_UPLOADS = {"finished"}
 
 
@@ -119,8 +118,10 @@ class JobWorker:
                     self._upload_variant(db, job)
                 elif job.type == "PUBLISH_PHOTO":
                     self._publish_photo(db, job)
-                elif job.type == "FACE_INDEX":
-                    self._face_index(db, job)
+                elif job.type == "SYNC_EVENT":
+                    self._sync_event(db, job)
+                elif job.type == "SYNC_PHOTO":
+                    self._sync_photo(db, job)
                 job.state = "PROCESSED"
                 db.commit()
             except Exception as exc:
@@ -162,7 +163,6 @@ class JobWorker:
             db.add(Job(event_id=event.id, photo_id=photo.id, type="PUBLISH_PHOTO", priority=70))
         elif not drive_required(event) and not auto_publish_enabled(event):
             photo.status = "AWAITING_REVIEW"
-        db.add(Job(event_id=event.id, photo_id=photo.id, type="FACE_INDEX", priority=90))
         db.commit()
 
     def _upload_variant(self, db, job: Job) -> None:
@@ -199,14 +199,15 @@ class JobWorker:
                 photo.thumbnail_object_id = result["id"]
             elif upload.variant == "preview":
                 photo.preview_object_id = result["id"]
+            # SessionLocal disables autoflush, so persist the completed upload
+            # before checking whether every required file is ready to publish.
+            db.flush()
             if event and drive_required(event) and self._required_uploads_done(db, photo.id) and not photo.published:
                 if auto_publish_enabled(event):
                     db.add(Job(event_id=event.id, photo_id=photo.id, type="PUBLISH_PHOTO", priority=70))
                 else:
                     photo.status = "AWAITING_REVIEW"
         db.commit()
-        if event and photo and upload.variant == "finished":
-            sync_photo(event, photo)
 
     def _publish_photo(self, db, job: Job) -> None:
         event = db.get(Event, job.event_id)
@@ -231,7 +232,18 @@ class JobWorker:
         photo.hidden = False
         photo.status = "PUBLISHED"
         db.commit()
-        sync_photo(event, photo)
+        sync_photo(event, photo, strict=cloud_sync_enabled())
+
+    def _sync_event(self, db, job: Job) -> None:
+        event = db.get(Event, job.event_id)
+        if event:
+            sync_event(event, strict=cloud_sync_enabled())
+
+    def _sync_photo(self, db, job: Job) -> None:
+        event = db.get(Event, job.event_id)
+        photo = db.get(Photo, job.photo_id)
+        if event and photo:
+            sync_photo(event, photo, strict=cloud_sync_enabled())
 
     def _required_uploads_done(self, db, photo_id: str) -> bool:
         uploaded = {
@@ -244,13 +256,6 @@ class JobWorker:
             )
         }
         return REQUIRED_GALLERY_UPLOADS.issubset(uploaded)
-
-    def _face_index(self, db, job: Job) -> None:
-        photo = db.get(Photo, job.photo_id)
-        if photo and photo.status not in TERMINAL:
-            photo.status = photo.status
-        # Face indexing is intentionally low priority and optional in local V1.
-        db.commit()
 
     def _fail_or_retry(self, db, job: Job, error: str) -> None:
         job.error = error[:2000]

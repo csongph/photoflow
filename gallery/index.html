@@ -18,7 +18,6 @@
       <p id="heroSub" class="hero-sub">รูปภาพจากงานจะอัปเดตอัตโนมัติระหว่างที่ทีมถ่ายภาพกำลังทำงาน</p>
       <div class="hero-actions">
         <a href="#grid" class="button">ดูรูปทั้งหมด</a>
-        <a href="#find" id="findJump" class="button secondary" style="display:none">ค้นหารูปของฉัน</a>
         <button id="shareJump" class="button secondary" onclick="copyShareText()">แชร์ลิงก์</button>
         <button id="downloadLinks" class="button secondary" onclick="copyDownloadLinks()" style="display:none">คัดลอกลิงก์ดาวน์โหลด</button>
         <button id="reportHero" class="button secondary" onclick="reportIssue()">แจ้งปัญหา</button>
@@ -82,20 +81,6 @@
       <img id="mobileQr" alt="QR code สำหรับเปิดแกลเลอรี">
     </section>
 
-    <section id="find" class="find" style="display:none">
-      <div>
-        <p class="eyebrow">Find My Photos</p>
-        <h2>ค้นหารูปของฉัน</h2>
-        <p>อัปโหลด selfie หนึ่งรูปเพื่อค้นหารูปที่มีใบหน้าของคุณในงานนี้ ระบบทดลองจะแจ้งสถานะจริงจาก backend ที่ตั้งค่าอยู่ตอนนี้</p>
-      </div>
-      <form onsubmit="findMyPhotos(event)" class="find-form">
-        <input id="selfie" type="file" accept="image/*">
-        <label class="consent"><input id="consent" type="checkbox"> ยินยอมให้ใช้รูปนี้ชั่วคราวเพื่อค้นหารูปใน event นี้</label>
-        <button>ค้นหา</button>
-      </form>
-      <p id="findResult" class="muted"></p>
-    </section>
-
     <footer class="gallery-footer">
       <strong id="creditFooter">ถ่ายภาพโดยทีมโสตโรงเรียน</strong>
       <span id="reportFooter">พบปัญหารูปเสียหรือดาวน์โหลดไม่ได้ กด “แจ้งปัญหา” เพื่อคัดลอกรายละเอียดให้ทีมงาน</span>
@@ -104,7 +89,7 @@
 
   <div id="lightbox" class="modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
   <script src="/api/config.js"></script>
-  <script src="/js/gallery.js?v=20260827-school-30"></script>
+  <script src="/js/gallery.js?v=20260909-school-31"></script>
   <script>initGallery()</script>
 </body>
 </html>

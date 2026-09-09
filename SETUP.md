@@ -65,17 +65,7 @@ MomentLink ไม่ได้ควบคุมกล้อง Canon โดย�
 6. ถ่ายภาพทดสอบ 1 รูป
 7. ตรวจว่า MomentLink detect, backup, process และแสดงรูปได้
 
-## 6. Demo Mode
-
-บน Dashboard กด:
-
-```text
-Simulate Photo
-```
-
-ปุ่มนี้จะเขียนไฟล์ JPEG ทดสอบลง `INCOMING` และใช้ watcher/processing pipeline เดียวกับการถ่ายจากกล้องจริง
-
-## 7. Cloud และ Gallery
+## 6. Cloud และ Gallery
 
 Local capture ไม่ต้องใช้อินเทอร์เน็ต
 

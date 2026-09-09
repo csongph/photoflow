@@ -29,11 +29,11 @@ https://momentlink-gallery.vercel.app
 ลิงก์แกลเลอรี่จริงจะเป็น:
 
 ```text
-https://momentlink-gallery.vercel.app/gallery/{public_id}
+https://momentlink-gallery.vercel.app/?event={public_id}
 ```
 
 ดังนั้นฝั่ง backend และ local ควรตั้ง:
 
 ```env
-PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app/gallery
+PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app
 ```

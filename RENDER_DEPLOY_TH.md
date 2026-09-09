@@ -34,10 +34,10 @@ PUBLIC_GALLERY_BASE_URL=<URL ของ Vercel gallery>
 https://momentlink-gallery.vercel.app
 ```
 
-แล้วตั้ง:
+แล้วตั้งเป็นโดเมนรากของ frontend (ไม่ต้องเติม `/gallery`):
 
 ```env
-PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app/gallery
+PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app
 ```
 
 จากนั้น redeploy อีกครั้ง
@@ -48,7 +48,7 @@ PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app/gallery
 
 ```env
 CLOUD_API_URL=https://momentlink-cloud.onrender.com
-PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app/gallery
+PUBLIC_GALLERY_BASE_URL=https://momentlink-gallery.vercel.app
 CLOUD_SYNC_TOKEN=<ค่าเดียวกับบน Render>
 ```
 
@@ -57,9 +57,21 @@ CLOUD_SYNC_TOKEN=<ค่าเดียวกับบน Render>
 ## URL สำคัญ
 
 - Health check: `https://momentlink-cloud.onrender.com/healthz`
-- Guest gallery: `https://momentlink-gallery.vercel.app/gallery/{public_id}`
+- Guest gallery: `https://momentlink-gallery.vercel.app/?event={public_id}`
 - Gallery API: `https://momentlink-cloud.onrender.com/api/gallery/{public_id}`
 
 ## หมายเหตุ
 
 Render web service ต้อง bind ที่ `0.0.0.0` และใช้ `$PORT` ซึ่ง `Dockerfile` ตั้งไว้แล้ว
+
+## กรณีตั้ง Root Directory เป็น `cloud` เอง
+
+ถ้าไม่ได้ใช้ Blueprint/Dockerfile ที่ root โปรเจกต์ และตั้ง Root Directory ใน Render เป็น `cloud` ให้ใช้:
+
+```text
+Build Command: pip install -r requirements.txt
+Start Command: alembic upgrade head && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT
+Health Check Path: /healthz
+```
+
+ห้ามตัด `alembic upgrade head` ออก เพราะ schema ของ Supabase ต้องถูกอัปเดตก่อน backend รุ่นใหม่เริ่มทำงาน

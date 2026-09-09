@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from urllib.parse import quote
 
 import qrcode
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -27,6 +28,12 @@ def event_by_public_id(db: Session, public_id: str) -> Event:
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
+    try:
+        enabled = json.loads(event.gallery_json or "{}").get("enable_gallery", True)
+    except json.JSONDecodeError:
+        enabled = True
+    if not enabled:
+        raise HTTPException(404, "Gallery is closed")
     return event
 
 
@@ -63,7 +70,7 @@ def gallery(public_id: str, pin: str = "", db: Session = Depends(get_db)):
         },
         "settings": {
             "allow_download": settings.get("allow_download", True),
-            "find_my_photos": settings.get("find_my_photos", True),
+            "find_my_photos": False,
             "credit_text": settings.get("credit_text") or "ถ่ายภาพโดยทีมโสตโรงเรียน",
             "report_contact": settings.get("report_contact") or "",
             "locked": locked,
@@ -86,18 +93,25 @@ def gallery_qr(public_id: str, db: Session = Depends(get_db)):
 def photos(public_id: str, page: int = 1, page_size: int = 60, pin: str = "", db: Session = Depends(get_db)):
     event = event_by_public_id(db, public_id)
     require_gallery_access(event, pin)
+    page = max(page, 1)
+    page_size = min(max(page_size, 1), 100)
     rows = (
         db.query(Photo)
         .filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False)
         .order_by(Photo.created_at.desc())
-        .offset((max(page, 1) - 1) * page_size)
-        .limit(min(max(page_size, 1), 100))
+        .offset((page - 1) * page_size)
+        .limit(page_size)
         .all()
     )
+    photo_ids = [photo.id for photo in rows]
+    uploads_by_photo: dict[str, dict[str, Upload]] = {photo_id: {} for photo_id in photo_ids}
+    if photo_ids:
+        for upload in db.query(Upload).filter(Upload.photo_id.in_(photo_ids), Upload.state == "UPLOADED").all():
+            uploads_by_photo.setdefault(upload.photo_id, {})[upload.variant] = upload
     result = []
     for photo in rows:
         variants = []
-        uploaded = {u.variant: u for u in db.query(Upload).filter(Upload.photo_id == photo.id, Upload.state == "UPLOADED").all()}
+        uploaded = uploads_by_photo.get(photo.id, {})
         if photo.thumbnail_path:
             drive_id = uploaded.get("thumbnail").object_id if uploaded.get("thumbnail") else ""
             url = local_media_url(photo, "THUMBNAILS", photo.thumbnail_path)
@@ -108,46 +122,46 @@ def photos(public_id: str, page: int = 1, page_size: int = 60, pin: str = "", db
             variants.append({"kind": "preview", "url": url, "drive_id": uploaded.get("preview").object_id if uploaded.get("preview") else ""})
         if photo.finished_path:
             drive_id = uploaded.get("finished").object_id if uploaded.get("finished") else ""
-            url = drive_download_url(drive_id) if drive_id else local_media_url(photo, "FINISHED", photo.finished_path)
+            url = f"/api/gallery/{public_id}/photos/{photo.id}/download"
+            if pin:
+                url = f"{url}?pin={quote(pin, safe='')}"
             variants.append({"kind": "finished", "url": url, "drive_id": drive_id})
         result.append({"id": photo.id, "filename": photo.filename, "variants": variants})
     return result
+
+
+@router.get("/{public_id}/photos/{photo_id}/download")
+def download_photo(public_id: str, photo_id: str, pin: str = "", db: Session = Depends(get_db)):
+    event = event_by_public_id(db, public_id)
+    require_gallery_access(event, pin)
+    if not gallery_settings(event).get("allow_download", True):
+        raise HTTPException(403, "Downloads are disabled")
+    photo = db.get(Photo, photo_id)
+    if not photo or photo.event_id != event.id or not photo.published or photo.hidden:
+        raise HTTPException(404, "Photo not found")
+    path = Path(photo.finished_path)
+    if not path.exists() or not path.is_file():
+        raise HTTPException(404, "Download file not found")
+    return FileResponse(path, filename=path.name, media_type="image/jpeg")
 
 
 @router.get("/{public_id}/downloads")
 def download_links(public_id: str, pin: str = "", db: Session = Depends(get_db)):
     event = event_by_public_id(db, public_id)
     require_gallery_access(event, pin)
+    if not gallery_settings(event).get("allow_download", True):
+        raise HTTPException(403, "Downloads are disabled")
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()
     result = []
     for photo in rows:
-        upload = db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant == "finished", Upload.state == "UPLOADED").first()
-        if upload and upload.object_id:
-            url = drive_download_url(upload.object_id)
-        elif photo.finished_path:
-            url = f"/media/{photo.event_id}/FINISHED/{Path(photo.finished_path).name}"
-        else:
+        if not photo.finished_path:
             continue
-        result.append({"filename": photo.filename, "url": url})
+        url = f"/api/gallery/{public_id}/photos/{photo.id}/download"
+        if pin:
+            url = f"{url}?pin={quote(pin, safe='')}"
+        result.append({"filename": Path(photo.finished_path).name, "url": url})
     return {
         "event": event.name,
         "gallery_url": public_gallery_url(db, event.public_id),
         "links": result,
-    }
-
-
-@router.post("/{public_id}/find-my-photos")
-async def find_my_photos(public_id: str, consent: bool = False, pin: str = "", file: UploadFile = File(...), db: Session = Depends(get_db)):
-    event = event_by_public_id(db, public_id)
-    require_gallery_access(event, pin)
-    if not consent:
-        raise HTTPException(400, "ต้องยินยอมก่อนอัปโหลดภาพเพื่อค้นหา")
-    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
-        raise HTTPException(400, "ชนิดไฟล์ภาพไม่รองรับ")
-    data = await file.read()
-    if len(data) > 8_000_000:
-        raise HTTPException(400, "ไฟล์ภาพใหญ่เกินไป")
-    return {
-        "status": "NEEDS_FACE_ENGINE",
-        "message": "โหมด Find My Photos ต้องตั้งค่า face engine/cloud ก่อน ตอนนี้ gallery ยังดูรูปได้ตามปกติ",
     }

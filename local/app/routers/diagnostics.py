@@ -16,7 +16,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import Event, Job, Photo, Setting, Upload
 from ..utils.local_paths import ensure_event_root
-from ..utils.public_url import public_gallery_base_url
+from ..utils.public_url import public_gallery_base_url, public_gallery_url
 from ..watcher.service import watcher_manager
 
 router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
@@ -128,6 +128,8 @@ def diagnostics(db: Session = Depends(get_db)):
     queues = {
         "processing": db.query(Job).filter(Job.type == "PROCESS_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "upload": db.query(Job).filter(Job.type == "UPLOAD_VARIANT", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
+        "publish": db.query(Job).filter(Job.type == "PUBLISH_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
+        "cloud_sync": db.query(Job).filter(Job.type.in_(["SYNC_EVENT", "SYNC_PHOTO"]), Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "face": db.query(Job).filter(Job.type == "FACE_INDEX", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "failed": db.query(Job).filter(Job.state == "FAILED").count(),
         "uploads_ready": db.query(Upload).filter(Upload.state.in_(["QUEUED", "READY_TO_UPLOAD"])).count(),
@@ -150,7 +152,10 @@ def readiness(db: Session = Depends(get_db)):
     event_root_ok, event_root_message = write_check(event_root)
     lan_ip = local_lan_ip()
     public_base = public_gallery_base_url(db)
-    public_ok = bool(lan_ip and lan_ip in public_base and "127.0.0.1" not in public_base and "localhost" not in public_base)
+    is_localhost = "127.0.0.1" in public_base or "localhost" in public_base
+    is_public_https = public_base.startswith("https://") and not is_localhost
+    is_lan_url = bool(lan_ip and lan_ip in public_base and not is_localhost)
+    public_ok = is_public_https or is_lan_url
     google_connected = bool(db.get(Setting, "google_refresh_token") and db.get(Setting, "google_refresh_token").value)
     google_configured = bool(os.getenv("GOOGLE_CLIENT_ID") and os.getenv("GOOGLE_CLIENT_SECRET") and os.getenv("GOOGLE_REDIRECT_URI"))
     active_event = db.query(Event).filter(Event.status == "LIVE").order_by(Event.updated_at.desc()).first()
@@ -165,7 +170,7 @@ def readiness(db: Session = Depends(get_db)):
             "status": latest_event.status,
             "incoming_ok": incoming_ok,
             "incoming_message": incoming_message,
-            "gallery_url": f"{public_base}/{latest_event.public_id}",
+            "gallery_url": public_gallery_url(db, latest_event.public_id),
         }
 
     steps = [

@@ -16,8 +16,9 @@ create index if not exists ix_events_public_id on events (public_id);
 
 create table if not exists gallery_settings (
   event_id varchar(32) primary key references events(id) on delete cascade,
+  enabled boolean not null default true,
   allow_download boolean not null default true,
-  find_my_photos boolean not null default true,
+  find_my_photos boolean not null default false,
   auto_refresh boolean not null default true,
   credit_text varchar(220) not null default '',
   report_contact varchar(220) not null default ''

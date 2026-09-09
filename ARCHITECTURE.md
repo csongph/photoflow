@@ -53,7 +53,6 @@ Local:
 - `POST /api/events/{event_id}/start`
 - `POST /api/events/{event_id}/end`
 - `POST /api/events/{event_id}/open-folder`
-- `POST /api/events/{event_id}/simulate-photo`
 - `POST /api/events/{event_id}/pause-publishing`
 - `GET /api/events/{event_id}/photos`
 - `GET /api/events/{event_id}/failed-jobs`
@@ -70,14 +69,12 @@ Cloud:
 - `POST /api/sync/photo`
 - `GET /api/gallery/{public_id}`
 - `GET /api/gallery/{public_id}/photos`
-- `POST /api/gallery/{public_id}/find-my-photos`
 
 ## Security Notes
 
 - ไม่มี secrets ใน frontend
 - Gallery IDs เป็น random URL-safe tokens
 - Local media serving ตรวจ event, variant, filename และ resolved path
-- Find My Photos ต้องมี explicit consent และตรวจ MIME/ขนาดไฟล์
 - Original files ไม่ถูก process in-place
 - Same-named captures จะถูกเปลี่ยนชื่อปลายทางเพื่อไม่ overwrite original เดิม
 

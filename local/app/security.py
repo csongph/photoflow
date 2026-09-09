@@ -429,8 +429,16 @@ async def login(request: Request) -> Response:
     next_path = form.get("next", ["/"])[0]
     if not hmac.compare_digest(password, admin_password()):
         return login_page("รหัสผ่านไม่ถูกต้อง")
-    response = RedirectResponse(next_path if next_path.startswith("/") else "/", status_code=303)
-    response.set_cookie(COOKIE_NAME, make_session(), httponly=True, samesite="lax", max_age=SESSION_TTL_SECONDS)
+    safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
+    response = RedirectResponse(safe_next, status_code=303)
+    response.set_cookie(
+        COOKIE_NAME,
+        make_session(),
+        httponly=True,
+        samesite="lax",
+        secure=request.url.scheme == "https",
+        max_age=SESSION_TTL_SECONDS,
+    )
     return response
 
 
