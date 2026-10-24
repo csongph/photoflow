@@ -23,7 +23,6 @@ router = APIRouter(prefix="/api/diagnostics", tags=["diagnostics"])
 
 REQUIRED_PACKAGES = ["fastapi", "uvicorn", "sqlalchemy", "watchdog", "PIL", "qrcode"]
 OPTIONAL_PACKAGES = {
-    "cv2": "optional: needed only for offline face search",
     "rawpy": "optional: needed only when importing RAW camera files",
 }
 
@@ -121,7 +120,7 @@ def diagnostics(db: Session = Depends(get_db)):
         "CONNECTED" if google_connected else ("credentials configured, connect required" if google_configured else "NEEDS MANUAL CREDENTIAL"),
         False,
     )
-    rows["face_engine"] = check("OK" if importlib.util.find_spec("cv2") else "OPTIONAL", "OpenCV available" if importlib.util.find_spec("cv2") else "offline face engine unavailable", False)
+    rows["face_engine"] = check("DISABLED", "ปิดใช้งานใน MomentLink V1", False)
     rows["watcher"] = check("OK" if event and event.id in watcher_manager.observers else "OPTIONAL", "watching active event" if event and event.id in watcher_manager.observers else "idle: start an event to watch INCOMING", False)
     rows["local_server"] = check("OK", f"{settings.local_host}:{settings.local_port}", True)
 
@@ -130,7 +129,6 @@ def diagnostics(db: Session = Depends(get_db)):
         "upload": db.query(Job).filter(Job.type == "UPLOAD_VARIANT", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "publish": db.query(Job).filter(Job.type == "PUBLISH_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "cloud_sync": db.query(Job).filter(Job.type.in_(["SYNC_EVENT", "SYNC_PHOTO"]), Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
-        "face": db.query(Job).filter(Job.type == "FACE_INDEX", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "failed": db.query(Job).filter(Job.state == "FAILED").count(),
         "uploads_ready": db.query(Upload).filter(Upload.state.in_(["QUEUED", "READY_TO_UPLOAD"])).count(),
     }

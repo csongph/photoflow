@@ -55,24 +55,29 @@ def event_payload(event: Event) -> dict[str, Any]:
 
 
 def photo_payload(event: Event, photo: Photo) -> dict[str, Any]:
+    filename = Path(photo.finished_path).name if photo.finished_path else ""
+    filename = filename or photo.filename or f"{photo.id}.jpg"
+    capture_id = (photo.capture_id or photo.id or filename).strip()
+    storage_provider = (photo.storage_provider or "local").strip()
+    storage_object_id = (photo.storage_object_id or "").strip()
     variants = []
-    if photo.storage_object_id:
+    if storage_object_id:
         variants.append({
             "kind": "finished",
-            "storage_provider": photo.storage_provider or "google_drive",
-            "storage_object_id": photo.storage_object_id,
+            "storage_provider": storage_provider,
+            "storage_object_id": storage_object_id,
             "width": 0,
             "height": 0,
         })
     return {
         "public_id": event.public_id,
         "local_photo_id": photo.id,
-        "filename": Path(photo.finished_path).name if photo.finished_path else photo.filename,
-        "capture_id": photo.capture_id,
-        "storage_provider": photo.storage_provider,
-        "storage_object_id": photo.storage_object_id,
-        "published": photo.published,
-        "hidden": photo.hidden,
+        "filename": filename[:260],
+        "capture_id": capture_id[:220],
+        "storage_provider": storage_provider[:60],
+        "storage_object_id": storage_object_id[:300],
+        "published": bool(photo.published),
+        "hidden": bool(photo.hidden),
         "variants": variants,
     }
 

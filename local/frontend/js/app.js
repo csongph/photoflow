@@ -1,4 +1,20 @@
 const $ = (q) => document.querySelector(q);
+function showToast(message, tone = "info") {
+  let toast = document.querySelector("#appToast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "appToast";
+    document.body.appendChild(toast);
+  }
+  toast.className = `app-toast ${tone}`;
+  toast.textContent = message;
+  clearTimeout(window.__momentlinkToastTimer);
+  window.__momentlinkToastTimer = setTimeout(() => toast.remove(), 4200);
+}
+window.addEventListener("unhandledrejection", event => {
+  console.error(event.reason);
+  showToast("เชื่อมต่อระบบไม่สำเร็จ กรุณาลองใหม่อีกครั้ง", "error");
+});
 const jsArg = (value) => JSON.stringify(String(value ?? ""))
   .replaceAll("&", "\\u0026")
   .replaceAll("'", "\\u0027")
@@ -33,14 +49,14 @@ const checkLabels = {
 function nav(active) {
   return `<aside class="nav">
     <div class="brand"><span>MomentLink</span><small>V1 Local</small></div>
-    <a class="${active === "dashboard" ? "active" : ""}" href="/">Dashboard</a>
-    <a class="${active === "setup" ? "active" : ""}" href="/setup">Setup</a>
-    <a class="${active === "events" ? "active" : ""}" href="/events">Events</a>
-    <a class="${active === "gallery" ? "active" : ""}" href="/gallery/local-preview">Guest Preview</a>
-    <a class="${active === "archive" ? "active" : ""}" href="/archive">Archive</a>
-    <a class="${active === "diagnostics" ? "active" : ""}" href="/diagnostics">System Check</a>
-    <a class="${active === "settings" ? "active" : ""}" href="/settings">Settings</a>
-    <a href="#" onclick="logoutAdmin(event)">Logout</a>
+    <a class="${active === "dashboard" ? "active" : ""}" href="/">แดชบอร์ด</a>
+    <a class="${active === "setup" ? "active" : ""}" href="/setup">เตรียมความพร้อม</a>
+    <a class="${active === "events" ? "active" : ""}" href="/events">งานถ่ายภาพ</a>
+    <a class="${active === "gallery" ? "active" : ""}" href="/gallery/local-preview">ตัวอย่างแกลเลอรี</a>
+    <a class="${active === "archive" ? "active" : ""}" href="/archive">คลังงาน</a>
+    <a class="${active === "diagnostics" ? "active" : ""}" href="/diagnostics">ตรวจระบบ</a>
+    <a class="${active === "settings" ? "active" : ""}" href="/settings">ตั้งค่า</a>
+    <a href="#" onclick="logoutAdmin(event)">ออกจากระบบ</a>
   </aside>`;
 }
 
@@ -55,13 +71,13 @@ function layout(active, content) {
 }
 
 async function loadDashboard() {
-  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">Live Capture Console</p><h1>MomentLink</h1><p class="hero-note">ควบคุมงานถ่ายภาพ ดู queue จริง และเปิดแกลเลอรีให้แขกทดสอบได้จากจุดเดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">Setup Check</a><button class="secondary" onclick="loadDashboard()">Refresh</button><div class="status pill"><span class="dot"></span><span id="live">Loading</span></div></div></div>
+  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">Live Capture Console</p><h1>MomentLink Studio</h1><p class="hero-note">ควบคุมงานถ่ายภาพ ดูคิวจริง และเปิดแกลเลอรีให้ผู้ใช้จากจุดเดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรช</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
   <div class="grid">
-    <section class="panel span-8 main-card"><h2>Active Event</h2><div id="active"></div></section>
-    <section class="panel span-4"><h2>Health Monitor</h2><div id="health"></div></section>
-    <section class="panel span-12"><h2>Preflight</h2><div id="preflight"></div></section>
-    <section class="panel span-7"><h2>Latest Photos</h2><div class="thumbs" id="thumbs"></div></section>
-    <section class="panel span-5"><h2>Export Queues</h2><div id="queues"></div></section>
+    <section class="panel span-8 main-card"><h2>งานที่กำลังทำ</h2><div id="active"></div></section>
+    <section class="panel span-4"><h2>สถานะระบบ</h2><div id="health"></div></section>
+    <section class="panel span-12"><h2>ตรวจความพร้อมก่อนเริ่มงาน</h2><div id="preflight"></div></section>
+    <section class="panel span-7"><h2>รูปภาพล่าสุด</h2><div class="thumbs" id="thumbs"></div></section>
+    <section class="panel span-5"><h2>คิวการทำงาน</h2><div id="queues"></div></section>
   </div>`);
   const data = await api("/api/dashboard");
   if (!data.active_event) {

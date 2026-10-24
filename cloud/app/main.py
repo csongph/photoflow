@@ -13,7 +13,7 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 GALLERY_DIR = ROOT_DIR / "gallery"
 
 app = FastAPI(title="MomentLink Cloud", version="1.0.0")
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["GET", "POST", "DELETE", "OPTIONS"], allow_headers=["*"])
 app.include_router(sync.router)
 app.include_router(gallery.router)
 

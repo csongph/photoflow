@@ -25,7 +25,8 @@ class Settings(BaseModel):
     jpeg_quality: int = int(os.getenv("JPEG_QUALITY", "90"))
     max_workers: int = int(os.getenv("WORKER_COUNT", "2"))
     auto_open_browser: bool = os.getenv("AUTO_OPEN_BROWSER", "true").lower() == "true"
-    face_search_enabled: bool = os.getenv("FACE_SEARCH_ENABLED", "true").lower() == "true"
+    # Face search is intentionally disabled in V1; the public workflow does not expose it.
+    face_search_enabled: bool = os.getenv("FACE_SEARCH_ENABLED", "false").lower() == "true"
 
 
 settings = Settings()

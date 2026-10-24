@@ -44,12 +44,14 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     event.name = name
     event.event_date = payload.get("event_date", "")
     event.description = payload.get("description", "")
-    event.pin_hash = pin_hash(str(payload.get("gallery_settings", {}).get("optional_pin") or ""))
+    incoming_settings = payload.get("gallery_settings")
+    incoming_settings = incoming_settings if isinstance(incoming_settings, dict) else {}
+    event.pin_hash = pin_hash(str(incoming_settings.get("optional_pin") or ""))
     db.add(event)
     db.flush()
     allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact"}
-    gallery_settings = {k: v for k, v in payload.get("gallery_settings", {}).items() if k in allowed}
-    gallery_settings["enabled"] = bool(payload.get("gallery_settings", {}).get("enable_gallery", True))
+    gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
+    gallery_settings["enabled"] = bool(incoming_settings.get("enable_gallery", True))
     gallery_settings["find_my_photos"] = False
     db.merge(GallerySettings(event_id=event.id, **gallery_settings))
     db.commit()
@@ -68,16 +70,43 @@ def sync_photo(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     photo = db.query(Photo).filter(Photo.event_id == event.id, Photo.local_photo_id == local_photo_id).first()
     if not photo:
         photo = Photo(event_id=event.id, local_photo_id=local_photo_id)
-    for key in ["filename", "capture_id", "storage_provider", "storage_object_id", "published", "hidden"]:
-        setattr(photo, key, payload.get(key, getattr(photo, key, None)))
+    filename = str(payload.get("filename") or getattr(photo, "filename", "") or f"{local_photo_id}.jpg").strip()
+    capture_id = str(payload.get("capture_id") or getattr(photo, "capture_id", "") or local_photo_id).strip()
+    storage_provider = str(payload.get("storage_provider") or getattr(photo, "storage_provider", "") or "local").strip()
+    storage_object_id = str(payload.get("storage_object_id") or getattr(photo, "storage_object_id", "") or "").strip()
+    if not filename or len(filename) > 260 or not capture_id or len(capture_id) > 220 or len(storage_provider) > 60 or len(storage_object_id) > 300:
+        raise HTTPException(422, "Invalid photo metadata")
+    photo.filename = filename
+    photo.capture_id = capture_id
+    photo.storage_provider = storage_provider
+    photo.storage_object_id = storage_object_id
+    photo.published = bool(payload.get("published", getattr(photo, "published", False)))
+    photo.hidden = bool(payload.get("hidden", getattr(photo, "hidden", False)))
     db.add(photo)
     db.flush()
-    for variant in payload.get("variants", []):
-        row = db.query(PhotoVariant).filter(PhotoVariant.photo_id == photo.id, PhotoVariant.kind == variant.get("kind")).first()
+    variants = payload.get("variants") if isinstance(payload.get("variants"), list) else []
+    for variant in variants:
+        if not isinstance(variant, dict):
+            continue
+        kind = str(variant.get("kind") or "finished").strip()
+        provider = str(variant.get("storage_provider") or storage_provider).strip()
+        object_id = str(variant.get("storage_object_id") or "").strip()
+        if not kind or len(kind) > 30 or not object_id or len(provider) > 60 or len(object_id) > 300:
+            continue
+        row = db.query(PhotoVariant).filter(PhotoVariant.photo_id == photo.id, PhotoVariant.kind == kind).first()
         if not row:
-            row = PhotoVariant(photo_id=photo.id, kind=variant.get("kind", "finished"))
+            row = PhotoVariant(photo_id=photo.id, kind=kind)
         for key in ["storage_provider", "storage_object_id", "width", "height"]:
             setattr(row, key, variant.get(key, getattr(row, key, None)))
+        try:
+            width = max(0, int(variant.get("width") or 0))
+            height = max(0, int(variant.get("height") or 0))
+        except (TypeError, ValueError):
+            continue
+        row.storage_provider = provider
+        row.storage_object_id = object_id
+        row.width = width
+        row.height = height
         db.add(row)
     db.commit()
     return {"photo_id": photo.id}

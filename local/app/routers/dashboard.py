@@ -61,7 +61,6 @@ def dashboard(db: Session = Depends(get_db)):
             "upload": db.query(Job).filter(Job.event_id == event.id, Job.type == "UPLOAD_VARIANT", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
             "publish": db.query(Job).filter(Job.event_id == event.id, Job.type == "PUBLISH_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
             "cloud_sync": db.query(Job).filter(Job.event_id == event.id, Job.type.in_(["SYNC_EVENT", "SYNC_PHOTO"]), Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
-            "face": db.query(Job).filter(Job.event_id == event.id, Job.type == "FACE_INDEX", Job.state.in_(["QUEUED", "RETRYING"])).count(),
         },
     }
 
