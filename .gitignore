@@ -1,4 +1,7 @@
-/.env
+.env
+.env.*
+!.env.example
+!.env.render.example
 .env.local
 .env.*.local
 .venv/
@@ -12,3 +15,6 @@ local/data/
 local/logs/
 local/events/
 testระบบ/
+*.log
+debug.log
+local/test_events/
