@@ -14,9 +14,9 @@ ROOT_DIR = Path(__file__).resolve().parents[2]
 GALLERY_DIR = ROOT_DIR / "gallery"
 
 app = FastAPI(title="MomentLink Cloud", version="1.0.0")
-gallery_origins = [origin.strip().rstrip("/") for origin in os.getenv("GALLERY_CORS_ORIGINS", "").split(",") if origin.strip()]
-if gallery_origins:
-    app.add_middleware(CORSMiddleware, allow_origins=gallery_origins, allow_credentials=True, allow_methods=["GET", "POST", "DELETE", "OPTIONS"], allow_headers=["*"])
+configured_origins = os.getenv("GALLERY_CORS_ORIGINS", "https://photoflow-seven.vercel.app")
+gallery_origins = [origin.strip().rstrip("/") for origin in configured_origins.split(",") if origin.strip()]
+app.add_middleware(CORSMiddleware, allow_origins=gallery_origins, allow_credentials=True, allow_methods=["GET", "POST", "DELETE", "OPTIONS"], allow_headers=["*"])
 app.include_router(sync.router)
 app.include_router(gallery.router)
 

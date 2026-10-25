@@ -14,4 +14,4 @@ services:
       - key: PUBLIC_GALLERY_BASE_URL
         sync: false
       - key: GALLERY_CORS_ORIGINS
-        sync: false
+        value: https://photoflow-seven.vercel.app
