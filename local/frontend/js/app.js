@@ -211,7 +211,8 @@ async function retryPhotoboothFrame(eventId) {
   status.textContent = "กำลังอัปโหลดกรอบ...";
   try {
     const results = await Promise.all(files.map(([orientation, selected]) => uploadPhotoboothFrame(eventId, selected, orientation)));
-    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ</div>`;
+    const reprocessed = await api(`/api/events/${eventId}/photos/reprocess`, { method: "POST" });
+    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเก่า ${reprocessed.queued} รูปกลับไปประมวลผลแล้ว</div>`;
   } catch (err) {
     status.innerHTML = `<div class="frame-upload-error">อัปโหลดไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(eventId)})'>ลองอีกครั้ง</button></div>`;
   }
@@ -268,7 +269,8 @@ async function createEvent(ev) {
   if (frameEnabled) {
     try {
       const results = await Promise.all(frameFiles.map(([orientation, file]) => uploadPhotoboothFrame(event.id, file, orientation)));
-      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ รูปแต่ละแนวจะเลือกกรอบให้เอง</div>`;
+      const reprocessed = await api(`/api/events/${event.id}/photos/reprocess`, { method: "POST" });
+      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว</div>`;
     } catch (err) {
       frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
     }

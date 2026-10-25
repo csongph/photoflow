@@ -102,7 +102,9 @@ def drive_preview_url(file_id: str, size: int = 1600) -> str:
 
 
 def photo_download_url(request: Request, public_id: str, photo_id: str, pin: str = "") -> str:
-    return f"{request_base_url(request)}/api/gallery/{public_id}/photos/{photo_id}/download"
+    # Keep gallery downloads same-origin so the Vercel API rewrite can proxy
+    # them and the browser never needs cross-site CORS for protected media.
+    return f"/api/gallery/{public_id}/photos/{photo_id}/download"
 
 
 def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str:

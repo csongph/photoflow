@@ -7,6 +7,10 @@
       "destination": "/gallery/api/config.js"
     },
     {
+      "source": "/api/:path*",
+      "destination": "https://photoflow-thcz.onrender.com/api/:path*"
+    },
+    {
       "source": "/css/:path*",
       "destination": "/gallery/css/:path*"
     },

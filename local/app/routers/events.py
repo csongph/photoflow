@@ -691,7 +691,11 @@ def reprocess_photos(event_id: str, db: Session = Depends(get_db)):
         photo.status = "QUEUED"
         photo.error = ""
         photo.published = False
-        db.add(Job(event_id=event.id, photo_id=photo.id, type="PROCESS_PHOTO", priority=15))
+        for upload in db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant == "finished").all():
+            upload.state = "QUEUED"
+            upload.object_id = ""
+            upload.error = ""
+        enqueue_unique_job(db, event.id, "PROCESS_PHOTO", photo.id, 15)
         count += 1
     db.commit()
     return {"ok": True, "queued": count}

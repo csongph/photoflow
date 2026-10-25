@@ -11,7 +11,7 @@ from local.app.models import Event, Job, Photo, Setting, Upload
 from local.app.processing.pipeline import process_photo
 from local.app.queue.worker import JobWorker, recover_jobs
 from local.app.queue.worker import drive_filename
-from local.app.routers.events import delete_event, import_cloud_events, import_finished_photos, retry_failed_job
+from local.app.routers.events import delete_event, import_cloud_events, import_finished_photos, reprocess_photos, retry_failed_job
 from local.app.routers.events import publish_photo, update_photo_visibility
 from local.app.routers.gallery import pin_ok
 from local.app.routers.gallery import photos as gallery_photos
@@ -280,6 +280,33 @@ def test_reprocess_with_existing_drive_uploads_requeues_publish(tmp_path: Path):
         worker = JobWorker(1)
         worker._process_photo(db, job)
         assert db.query(Job).filter(Job.type == "PUBLISH_PHOTO").count() == 1
+
+
+def test_reprocess_photos_requeues_uploaded_finished_variant(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    original = Path(event.root_path) / "ORIGINAL" / "capture.jpg"
+    Image.new("RGB", (800, 600), "white").save(original, "JPEG", quality=95)
+    finished = Path(event.root_path) / "FINISHED" / "capture.jpg"
+    finished.parent.mkdir(exist_ok=True)
+    Image.new("RGB", (800, 600), "black").save(finished, "JPEG", quality=90)
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        photo = Photo(event_id=event.id, capture_id="capture", filename="capture.jpg", original_path=str(original), finished_path=str(finished), checksum=sha256_file(original), file_size=original.stat().st_size, status="PUBLISHED", published=True)
+        db.add(photo)
+        db.flush()
+        upload = Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=str(finished), state="UPLOADED", object_id="old-drive-id")
+        db.add(upload)
+        db.commit()
+
+        result = reprocess_photos(event.id, db=db)
+
+        db.refresh(photo)
+        db.refresh(upload)
+        assert result["queued"] == 1
+        assert photo.published is False
+        assert upload.state == "QUEUED"
+        assert upload.object_id == ""
 
 
 def test_review_setting_still_auto_publishes(tmp_path: Path):
