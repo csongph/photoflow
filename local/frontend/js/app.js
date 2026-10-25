@@ -159,7 +159,7 @@ async function loadEvents() {
     <label><span>Description</span><textarea name="description"></textarea></label>
     <label><span>Date</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>กรอบรูปสำหรับงานนี้</h2><p class="muted">อัปโหลด PNG พื้นหลังโปร่งใส ระบบจะวางกรอบทับรูปที่ประมวลผล และเก็บ ORIGINAL ไว้เหมือนเดิม ใช้กรอบที่มีสัดส่วนและแนวภาพตรงกับรูปถ่ายเพื่อไม่ให้ขอบถูกตัด</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG (พื้นหลังโปร่งใส ไม่เกิน 20 MB)</span><input id="photoboothFrameInput" name="photobooth_frame" type="file" accept="image/png,.png"></label><img id="photoboothFramePreview" class="frame-preview" alt="ตัวอย่างกรอบโฟโต้บูท" hidden><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>กรอบรูปสำหรับงานนี้</h2><p class="muted">อัปโหลดกรอบ PNG โปร่งใสแยกแนวนอนและแนวตั้ง ระบบเลือกกรอบให้ตรงกับภาพแต่ละใบโดยอัตโนมัติ เก็บภาพต้นฉบับไว้เหมือนเดิม หากใช้กรอบเดียว ระบบจะรักษาสัดส่วนและเว้นพื้นที่โปร่งใสแทนการยืดหรือตัดกรอบ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>กรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><img id="photoboothFrameLandscapePreview" class="frame-preview" alt="ตัวอย่างกรอบแนวนอน" hidden><label><span>กรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><img id="photoboothFramePortraitPreview" class="frame-preview" alt="ตัวอย่างกรอบแนวตั้ง" hidden><div id="frameUploadResult"></div></section>
     <h2>Gallery</h2><div class="checks">${["enable_gallery","allow_download"].map(k => `<label class="check"><input type="checkbox" name="${k}" checked>${k.replaceAll("_"," ")}</label>`).join("")}<label class="check"><input type="checkbox" name="instant_publish" checked disabled>auto publish</label></div>
     <label><span>Optional PIN</span><input name="optional_pin"></label>
     <label><span>Gallery Credit</span><input name="credit_text" value="ถ่ายภาพโดยทีมโสตโรงเรียน"></label>
@@ -168,14 +168,16 @@ async function loadEvents() {
     <button>Create Event</button>
   </form><section class="panel span-5"><div class="preview-head"><div><h2>Events</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">Scan Local Folders</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
   $("#eventForm").addEventListener("submit", createEvent);
-  $("#photoboothFrameInput").addEventListener("change", previewPhotoboothFrame);
+  $("#photoboothFrameLandscape").addEventListener("change", previewPhotoboothFrame);
+  $("#photoboothFramePortrait").addEventListener("change", previewPhotoboothFrame);
   renderEvents();
 }
 
 function previewPhotoboothFrame(ev) {
   const file = ev.target.files?.[0];
-  const preview = $("#photoboothFramePreview");
-  if (window.__photoboothFramePreviewUrl) URL.revokeObjectURL(window.__photoboothFramePreviewUrl);
+  const preview = ev.target.id === "photoboothFrameLandscape" ? $("#photoboothFrameLandscapePreview") : $("#photoboothFramePortraitPreview");
+  const previewKey = `__${ev.target.id}Url`;
+  if (window[previewKey]) URL.revokeObjectURL(window[previewKey]);
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
@@ -187,25 +189,29 @@ function previewPhotoboothFrame(ev) {
     alert("กรุณาเลือกกรอบรูปไฟล์ PNG");
     return;
   }
-  window.__photoboothFramePreviewUrl = URL.createObjectURL(file);
-  preview.src = window.__photoboothFramePreviewUrl;
+  window[previewKey] = URL.createObjectURL(file);
+  preview.src = window[previewKey];
   preview.hidden = false;
 }
 
-async function uploadPhotoboothFrame(eventId, file) {
+async function uploadPhotoboothFrame(eventId, file, orientation) {
   const data = new FormData();
   data.append("frame", file, file.name);
-  return api(`/api/events/${eventId}/photobooth-frame`, { method: "POST", body: data, headers: {} });
+  return api(`/api/events/${eventId}/photobooth-frame?orientation=${orientation}`, { method: "POST", body: data, headers: {} });
 }
 
 async function retryPhotoboothFrame(eventId) {
-  const file = $("#photoboothFrameInput")?.files?.[0];
+  const files = [
+    ["landscape", $("#photoboothFrameLandscape")?.files?.[0]],
+    ["portrait", $("#photoboothFramePortrait")?.files?.[0]],
+  ].filter(([, file]) => file?.size);
+  const file = files[0]?.[1];
   if (!file) return alert("เลือกไฟล์กรอบ PNG ก่อนลองอีกครั้ง");
   const status = $("#frameUploadResult");
   status.textContent = "กำลังอัปโหลดกรอบ...";
   try {
-    const result = await uploadPhotoboothFrame(eventId, file);
-    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบสำเร็จ ${result.width} × ${result.height} px รูปใหม่จะใช้กรอบนี้</div>`;
+    const results = await Promise.all(files.map(([orientation, selected]) => uploadPhotoboothFrame(eventId, selected, orientation)));
+    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ</div>`;
   } catch (err) {
     status.innerHTML = `<div class="frame-upload-error">อัปโหลดไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(eventId)})'>ลองอีกครั้ง</button></div>`;
   }
@@ -243,10 +249,13 @@ async function createEvent(ev) {
   ev.preventDefault();
   const f = new FormData(ev.target);
   const checked = (k) => f.get(k) === "on";
-  const frameFile = f.get("photobooth_frame");
+  const frameFiles = [
+    ["landscape", f.get("photobooth_frame_landscape")],
+    ["portrait", f.get("photobooth_frame_portrait")],
+  ].filter(([, file]) => file instanceof File && file.size);
   const frameEnabled = checked("photobooth_frame_enabled");
-  if (frameEnabled && (!(frameFile instanceof File) || !frameFile.size)) {
-    alert("เลือกไฟล์กรอบ PNG ก่อนสร้างงาน หรือเอาเครื่องหมายใช้กรอบออก");
+  if (frameEnabled && !frameFiles.length) {
+    alert("เลือกกรอบ PNG แนวนอนหรือแนวตั้งอย่างน้อยหนึ่งไฟล์ หรือเอาเครื่องหมายใช้กรอบออก");
     return;
   }
   const payload = {
@@ -258,8 +267,8 @@ async function createEvent(ev) {
   let frameStatus = "";
   if (frameEnabled) {
     try {
-      const result = await uploadPhotoboothFrame(event.id, frameFile);
-      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบสำเร็จ ${result.width} × ${result.height} px รูปใหม่จะใช้กรอบนี้</div>`;
+      const results = await Promise.all(frameFiles.map(([orientation, file]) => uploadPhotoboothFrame(event.id, file, orientation)));
+      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ รูปแต่ละแนวจะเลือกกรอบให้เอง</div>`;
     } catch (err) {
       frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
     }

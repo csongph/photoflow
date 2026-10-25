@@ -7,6 +7,8 @@ from PIL import ImageStat
 
 from local.app.processing.corrections import apply_natural_corrections
 from local.app.processing.pipeline import fit_long_edge, open_source_image, save_jpeg_atomic
+from local.app.processing.pipeline import apply_photobooth_frame
+from local.app.models import Event
 from local.app.security import make_session, valid_session
 from local.app.utils.files import atomic_copy, safe_slug, sha256_file, unique_path, wait_until_stable
 
@@ -121,3 +123,19 @@ def test_admin_pin_session_is_signed(monkeypatch):
     token = make_session()
     assert valid_session(token)
     assert not valid_session(token + "x")
+
+
+def test_photobooth_uses_orientation_specific_frame(tmp_path: Path):
+    cache = tmp_path / "CACHE"
+    cache.mkdir()
+    landscape = Image.new("RGBA", (600, 300), (255, 0, 0, 128))
+    portrait = Image.new("RGBA", (300, 600), (0, 0, 255, 128))
+    landscape.save(cache / "photobooth-frame-landscape.png")
+    portrait.save(cache / "photobooth-frame-portrait.png")
+    event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
+
+    wide = apply_photobooth_frame(Image.new("RGB", (800, 400), "white"), event)
+    tall = apply_photobooth_frame(Image.new("RGB", (400, 800), "white"), event)
+
+    assert wide.getpixel((400, 200))[0] > wide.getpixel((400, 200))[2]
+    assert tall.getpixel((200, 400))[2] > tall.getpixel((200, 400))[0]

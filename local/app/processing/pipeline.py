@@ -51,12 +51,25 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
     if not gallery.get("photobooth_frame_enabled"):
         return img
 
-    frame_path = Path(event.root_path) / "CACHE" / "photobooth-frame.png"
+    orientation = "landscape" if img.width >= img.height else "portrait"
+    cache = Path(event.root_path) / "CACHE"
+    frame_path = cache / f"photobooth-frame-{orientation}.png"
     if not frame_path.is_file():
-        raise RuntimeError("Photobooth frame is enabled but its PNG file is missing")
+        alternate = cache / f"photobooth-frame-{'portrait' if orientation == 'landscape' else 'landscape'}.png"
+        legacy = cache / "photobooth-frame.png"
+        frame_path = alternate if alternate.is_file() else legacy
+    if not frame_path.is_file():
+        raise RuntimeError(f"Photobooth {orientation} frame is enabled but no compatible PNG is available")
     with Image.open(frame_path) as source:
         frame = source.convert("RGBA")
-    frame = ImageOps.fit(frame, img.size, method=Image.Resampling.LANCZOS)
+    # Preserve the frame artwork proportions. Separate landscape and portrait
+    # assets are preferred; if one is reused, transparent letterboxing avoids
+    # cropping or distorting its design.
+    frame = ImageOps.contain(frame, img.size, method=Image.Resampling.LANCZOS)
+    if frame.size != img.size:
+        canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
+        canvas.alpha_composite(frame, ((img.width - frame.width) // 2, (img.height - frame.height) // 2))
+        frame = canvas
     return Image.alpha_composite(img.convert("RGBA"), frame).convert("RGB")
 
 

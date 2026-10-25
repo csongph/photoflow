@@ -372,11 +372,14 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
 async def upload_photobooth_frame(
     event_id: str,
     frame: UploadFile = File(...),
+    orientation: str = "landscape",
     db: Session = Depends(get_db),
 ):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
+    if orientation not in {"landscape", "portrait"}:
+        raise HTTPException(422, "Frame orientation must be landscape or portrait")
     if not (frame.filename or "").lower().endswith(".png"):
         raise HTTPException(415, "กรอบโฟโต้บูทต้องเป็นไฟล์ PNG ที่มีพื้นหลังโปร่งใส")
     content = await frame.read(20 * 1024 * 1024 + 1)
@@ -397,7 +400,7 @@ async def upload_photobooth_frame(
     except Exception as exc:
         raise HTTPException(422, "อ่านไฟล์ PNG ไม่ได้ กรุณาเลือกไฟล์กรอบที่ถูกต้อง") from exc
 
-    frame_path = Path(event.root_path) / "CACHE" / "photobooth-frame.png"
+    frame_path = Path(event.root_path) / "CACHE" / f"photobooth-frame-{orientation}.png"
     frame_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = frame_path.with_suffix(".tmp.png")
     rgba.save(temp_path, format="PNG", optimize=True)
@@ -408,7 +411,7 @@ async def upload_photobooth_frame(
     if cloud_sync_enabled():
         enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
     db.commit()
-    return {"ok": True, "filename": frame_path.name, "width": rgba.width, "height": rgba.height}
+    return {"ok": True, "orientation": orientation, "filename": frame_path.name, "width": rgba.width, "height": rgba.height}
 
 
 @router.post("/{event_id}/start")
