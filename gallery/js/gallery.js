@@ -7,7 +7,6 @@ let knownPhotoCount = 0;
 let loadingPhotos = false;
 let galleryRefreshTimer = null;
 let galleryUrl = location.href.split("#")[0];
-let galleryPin = "";
 let galleryMeta = { eventName: "", creditText: "ถ่ายภาพโดยทีมโสตโรงเรียน", reportContact: "" };
 let galleryPhotos = [];
 let currentPhotoIndex = -1;
@@ -50,7 +49,7 @@ async function initGallery() {
   }
   try {
     setupScreenQr();
-    const meta = await getJson(`${API}/api/gallery/${publicId}${galleryPin ? `?pin=${encodeURIComponent(galleryPin)}` : ""}`);
+    const meta = await getJson(`${API}/api/gallery/${publicId}`);
     document.querySelector("h1").textContent = meta.event.name;
     document.title = `${meta.event.name} · MomentLink`;
     galleryUrl = meta.event.gallery_url || galleryUrl;
@@ -71,7 +70,6 @@ async function initGallery() {
     document.querySelector("#downloadLinks").style.display = meta.settings.allow_download && !meta.settings.locked ? "inline-flex" : "none";
     document.querySelector("#pinPanel").style.display = meta.settings.locked ? "grid" : "none";
     if (!meta.settings.locked) await loadPhotos(true);
-    galleryPin = "";
     clearInterval(galleryRefreshTimer);
     if (!meta.settings.locked) {
       galleryRefreshTimer = setInterval(() => {
@@ -82,12 +80,6 @@ async function initGallery() {
     document.querySelector("#grid").innerHTML = `<div class="empty"><div><b>เปิด Gallery ไม่ได้</b><br>ตรวจสอบลิงก์ QR หรือสถานะ event จากหน้า Dashboard</div></div>`;
     console.error(err);
   }
-}
-
-function withPin(url) {
-  const next = new URL(url, location.origin);
-  if (galleryPin) next.searchParams.set("pin", galleryPin);
-  return next.toString();
 }
 
 function setupScreenQr() {
@@ -122,10 +114,20 @@ function renderGalleryInfo() {
 
 async function unlockGallery(ev) {
   ev.preventDefault();
-  galleryPin = document.querySelector("#galleryPin").value.trim();
-  await initGallery();
-  galleryPin = "";
+  const pin = document.querySelector("#galleryPin").value.trim();
+  const response = await fetch(`${API}/api/gallery/${publicId}/unlock`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ pin })
+  });
   document.querySelector("#galleryPin").value = "";
+  if (!response.ok) {
+    if (response.status === 429) alert("ลองใส่ PIN ผิดหลายครั้ง กรุณารอสักครู่แล้วลองใหม่");
+    else alert("PIN ไม่ถูกต้อง");
+    return;
+  }
+  await initGallery();
 }
 
 async function copyShareText() {

@@ -64,14 +64,19 @@ def photo_payload(event: Event, photo: Photo) -> dict[str, Any]:
     storage_provider = (photo.storage_provider or "local").strip()
     storage_object_id = (photo.storage_object_id or "").strip()
     variants = []
-    if storage_object_id:
-        variants.append({
-            "kind": "finished",
-            "storage_provider": storage_provider,
-            "storage_object_id": storage_object_id,
-            "width": 0,
-            "height": 0,
-        })
+    for kind, object_id in (
+        ("finished", storage_object_id),
+        ("preview", (photo.preview_object_id or "").strip()),
+        ("thumbnail", (photo.thumbnail_object_id or "").strip()),
+    ):
+        if object_id:
+            variants.append({
+                "kind": kind,
+                "storage_provider": storage_provider,
+                "storage_object_id": object_id,
+                "width": 0,
+                "height": 0,
+            })
     return {
         "public_id": event.public_id,
         "local_photo_id": photo.id,
@@ -142,12 +147,40 @@ def list_cloud_events(*, strict: bool = False) -> list[dict[str, Any]]:
             raise CloudSyncError("Cloud API is not configured")
         return []
     try:
-        response = httpx.get(f"{base}/api/sync/events", headers=sync_headers(), timeout=20)
-        response.raise_for_status()
-        payload = response.json()
-        if not isinstance(payload, list):
-            raise ValueError("Cloud returned an invalid event list")
-        return payload
+        headers = sync_headers()
+        result: list[dict[str, Any]] = []
+        with httpx.Client(timeout=30) as client:
+            offset = 0
+            while True:
+                response = client.get(f"{base}/api/sync/events", params={"offset": offset, "limit": 100}, headers=headers)
+                response.raise_for_status()
+                events = response.json()
+                if not isinstance(events, list):
+                    raise ValueError("Cloud returned an invalid event list")
+                for event in events:
+                    if not isinstance(event, dict):
+                        raise ValueError("Cloud returned an invalid event")
+                    event["photos"] = []
+                    photo_offset = 0
+                    while True:
+                        photos_response = client.get(
+                            f"{base}/api/sync/events/{event['public_id']}/photos",
+                            params={"offset": photo_offset, "limit": 200},
+                            headers=headers,
+                        )
+                        photos_response.raise_for_status()
+                        photos = photos_response.json()
+                        if not isinstance(photos, list):
+                            raise ValueError("Cloud returned an invalid photo list")
+                        event["photos"].extend(photos)
+                        photo_offset += len(photos)
+                        if len(photos) < 200:
+                            break
+                    result.append(event)
+                offset += len(events)
+                if len(events) < 100:
+                    break
+        return result
     except Exception as exc:
         log.warning("Could not load cloud events: %s", exc)
         if strict:

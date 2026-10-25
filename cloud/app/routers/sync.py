@@ -14,7 +14,7 @@ from ..models import Event, FaceSearchSession, GallerySettings, Photo, PhotoFace
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 
-def event_out(event: Event, settings: GallerySettings | None) -> dict:
+def event_out(event: Event, settings: GallerySettings | None, *, include_photos: bool = False) -> dict:
     return {
         "public_id": event.public_id,
         "name": event.name,
@@ -44,7 +44,7 @@ def event_out(event: Event, settings: GallerySettings | None) -> dict:
                 ],
             }
             for photo in event.photos
-        ],
+        ] if include_photos else [],
     }
 
 
@@ -112,12 +112,40 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
 
 
 @router.get("/events")
-def list_cloud_events(db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
-    events = db.query(Event).order_by(Event.updated_at.desc()).all()
+def list_cloud_events(offset: int = 0, limit: int = 100, db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    offset = max(0, offset)
+    limit = min(max(1, limit), 200)
+    events = db.query(Event).order_by(Event.updated_at.desc()).offset(offset).limit(limit).all()
     result = []
     for event in events:
         result.append(event_out(event, db.get(GallerySettings, event.id)))
     return result
+
+
+@router.get("/events/{public_id}/photos")
+def list_cloud_event_photos(public_id: str, offset: int = 0, limit: int = 200, db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    offset = max(0, offset)
+    limit = min(max(1, limit), 500)
+    photos = db.query(Photo).filter(Photo.event_id == event.id).order_by(Photo.id.asc()).offset(offset).limit(limit).all()
+    return [
+        {
+            "local_photo_id": photo.local_photo_id,
+            "filename": photo.filename,
+            "capture_id": photo.capture_id,
+            "storage_provider": photo.storage_provider,
+            "storage_object_id": photo.storage_object_id,
+            "published": photo.published,
+            "hidden": photo.hidden,
+            "variants": [
+                {"kind": row.kind, "storage_provider": row.storage_provider, "storage_object_id": row.storage_object_id, "width": row.width, "height": row.height}
+                for row in photo.variants
+            ],
+        }
+        for photo in photos
+    ]
 
 
 @router.post("/photo")

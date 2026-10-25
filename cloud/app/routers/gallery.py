@@ -6,8 +6,9 @@ import os
 import time
 import tempfile
 import zipfile
+from threading import Lock
 from pathlib import Path
-from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -22,6 +23,12 @@ from ..models import Event, GallerySettings, Photo, PhotoVariant
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 PIN_COOKIE = "momentlink_gallery_access"
 PIN_TTL_SECONDS = 12 * 60 * 60
+PIN_ATTEMPTS = 8
+PIN_WINDOW_SECONDS = 300
+MAX_PHOTO_BYTES = 100 * 1024 * 1024
+MAX_ZIP_BYTES = 250 * 1024 * 1024
+_pin_failures: dict[tuple[str, str], list[float]] = {}
+_pin_failures_lock = Lock()
 
 
 def pin_ok(event: Event, pin: str = "") -> bool:
@@ -57,10 +64,30 @@ def cookie_pin_ok(event: Event, token: str) -> bool:
         return False
 
 
-def has_gallery_access(event: Event, request: Request, pin: str = "") -> bool:
+def has_gallery_access(event: Event, request: Request) -> bool:
     if not event.pin_hash:
         return True
-    return cookie_pin_ok(event, request.cookies.get(PIN_COOKIE, "")) or bool(pin and pin_ok(event, pin))
+    return cookie_pin_ok(event, request.cookies.get(PIN_COOKIE, ""))
+
+
+def check_pin_rate(request: Request, public_id: str) -> int:
+    key = (request.client.host if request.client else "unknown", public_id)
+    now = time.monotonic()
+    with _pin_failures_lock:
+        attempts = [stamp for stamp in _pin_failures.get(key, []) if now - stamp < PIN_WINDOW_SECONDS]
+        _pin_failures[key] = attempts
+        if len(attempts) >= PIN_ATTEMPTS:
+            return max(1, int(PIN_WINDOW_SECONDS - (now - attempts[0])))
+    return 0
+
+
+def record_pin_failure(request: Request, public_id: str) -> None:
+    key = (request.client.host if request.client else "unknown", public_id)
+    now = time.monotonic()
+    with _pin_failures_lock:
+        attempts = [stamp for stamp in _pin_failures.get(key, []) if now - stamp < PIN_WINDOW_SECONDS]
+        attempts.append(now)
+        _pin_failures[key] = attempts
 
 
 def grant_pin_access(event: Event, request: Request, response: Response, pin: str) -> bool:
@@ -73,6 +100,26 @@ def grant_pin_access(event: Event, request: Request, response: Response, pin: st
     is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
     response.set_cookie(PIN_COOKIE, pin_cookie_value(event.public_id, event.pin_hash), max_age=PIN_TTL_SECONDS, httponly=True, secure=is_https, samesite="none" if is_https else "lax", path=f"/api/gallery/{event.public_id}")
     return True
+
+
+@router.post("/{public_id}/unlock")
+def unlock_gallery(public_id: str, payload: dict, request: Request, response: Response, db: Session = Depends(get_db)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Gallery not found")
+    settings = db.get(GallerySettings, event.id)
+    if settings and not settings.enabled:
+        raise HTTPException(404, "Gallery is closed")
+    retry_after = check_pin_rate(request, public_id)
+    if retry_after:
+        raise HTTPException(429, "Too many incorrect PIN attempts", headers={"Retry-After": str(retry_after)})
+    pin = payload.get("pin") if isinstance(payload, dict) else None
+    if not isinstance(pin, str) or len(pin) > 64 or not grant_pin_access(event, request, response, pin):
+        record_pin_failure(request, public_id)
+        raise HTTPException(403, "Gallery PIN is incorrect")
+    with _pin_failures_lock:
+        _pin_failures.pop((request.client.host if request.client else "unknown", public_id), None)
+    return {"ok": True}
 
 
 def request_base_url(request: Request) -> str:
@@ -134,15 +181,14 @@ def variants_for_photo(db: Session, photo: Photo, download_url: str = "", rows: 
 
 
 @router.get("/{public_id}")
-def gallery(public_id: str, request: Request, response: Response, pin: str = "", db: Session = Depends(get_db)):
+def gallery(public_id: str, request: Request, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     settings = db.get(GallerySettings, event.id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
-    unlocked = grant_pin_access(event, request, response, pin)
-    locked = not unlocked
+    locked = not has_gallery_access(event, request)
     count = 0 if locked else db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).count()
     return {
         "event": {"name": event.name, "event_date": event.event_date, "photo_count": count, "gallery_url": public_gallery_url(event.public_id, request)},
@@ -173,14 +219,14 @@ def gallery_qr(public_id: str, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, request: Request, response: Response, page: int = 1, page_size: int = 60, pin: str = "", db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     settings = db.get(GallerySettings, event.id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
-    if not grant_pin_access(event, request, response, pin):
+    if not has_gallery_access(event, request):
         require_gallery_access(event)
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
@@ -197,7 +243,7 @@ def photos(public_id: str, request: Request, response: Response, page: int = 1, 
             "variants": variants_for_photo(
                 db,
                 p,
-                photo_download_url(request, public_id, p.id, pin),
+                photo_download_url(request, public_id, p.id),
                 variants_by_photo.get(p.id, []),
             ),
         }
@@ -237,37 +283,42 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
     if not finished or finished.storage_provider != "google_drive" or not finished.storage_object_id:
         raise HTTPException(404, "Download file not found")
 
-    client = httpx.AsyncClient(follow_redirects=True, timeout=60)
+    temp = tempfile.NamedTemporaryFile(prefix="momentlink-photo-", suffix=".jpg", delete=False)
+    download_path = temp.name
+    temp.close()
     try:
-        upstream = await client.send(
-            client.build_request("GET", drive_download_url(finished.storage_object_id)),
-            stream=True,
-        )
+        async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60, connect=15)) as client:
+            async with client.stream("GET", drive_download_url(finished.storage_object_id)) as upstream:
+                if upstream.status_code >= 400:
+                    raise HTTPException(502, f"File storage returned HTTP {upstream.status_code}")
+                with open(download_path, "wb") as output:
+                    total_bytes = 0
+                    async for chunk in upstream.aiter_bytes(1024 * 1024):
+                        total_bytes += len(chunk)
+                        if total_bytes > MAX_PHOTO_BYTES:
+                            raise HTTPException(413, "Photo exceeds the 100 MB download limit")
+                        output.write(chunk)
+                content_type = upstream.headers.get("content-type", "application/octet-stream")
+    except HTTPException:
+        if os.path.exists(download_path):
+            os.unlink(download_path)
+        raise
     except httpx.HTTPError as exc:
-        await client.aclose()
-        raise HTTPException(502, "Cannot connect to file storage") from exc
-    if upstream.status_code >= 400:
-        await upstream.aclose()
-        await client.aclose()
-        raise HTTPException(502, "Cannot download file from storage")
-
-    async def stream_file():
-        try:
-            async for chunk in upstream.aiter_bytes():
-                yield chunk
-        finally:
-            await upstream.aclose()
-            await client.aclose()
+        if os.path.exists(download_path):
+            os.unlink(download_path)
+        raise HTTPException(502, "Cannot download file from storage") from exc
+    except Exception:
+        if os.path.exists(download_path):
+            os.unlink(download_path)
+        raise
 
     filename = quote(photo.filename, safe="")
     headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
-    content_length = upstream.headers.get("content-length")
-    if content_length:
-        headers["Content-Length"] = content_length
-    return StreamingResponse(
-        stream_file(),
-        media_type=upstream.headers.get("content-type", "application/octet-stream"),
+    return FileResponse(
+        download_path,
+        media_type=content_type,
         headers=headers,
+        background=BackgroundTask(os.unlink, download_path),
     )
 
 
@@ -321,6 +372,7 @@ async def download_selected_photos(
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
             with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+                total_bytes = 0
                 for index, selected_id in enumerate(selected_ids, start=1):
                     photo = photos_by_id[selected_id]
                     variant = variants_by_photo[selected_id]
@@ -331,6 +383,9 @@ async def download_selected_photos(
                             raise HTTPException(502, "Cannot download one or more selected photos from storage")
                         with archive.open(archive_name, "w") as item:
                             async for chunk in upstream.aiter_bytes(1024 * 1024):
+                                total_bytes += len(chunk)
+                                if total_bytes > MAX_ZIP_BYTES:
+                                    raise HTTPException(413, "Selected photos exceed the 250 MB ZIP limit")
                                 item.write(chunk)
     except Exception:
         if os.path.exists(archive_path):
@@ -372,5 +427,5 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
     for photo in rows:
         finished = finished_by_photo.get(photo.id)
         if finished:
-            links.append({"filename": photo.filename, "url": photo_download_url(request, public_id, photo.id, pin)})
+            links.append({"filename": photo.filename, "url": photo_download_url(request, public_id, photo.id)})
     return {"event": event.name, "gallery_url": public_gallery_url(event.public_id, request), "links": links}

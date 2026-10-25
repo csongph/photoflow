@@ -50,7 +50,20 @@ def is_raw(path: Path) -> bool:
 
 
 def guess_mime(path: Path) -> str:
-    return mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+    try:
+        guessed = mimetypes.guess_type(path.name)[0]
+    except PermissionError:
+        # Windows may deny registry access in locked-down or service accounts.
+        guessed = None
+    if guessed:
+        return guessed
+    return {
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".tif": "image/tiff",
+        ".tiff": "image/tiff",
+    }.get(path.suffix.lower(), "application/octet-stream")
 
 
 def sha256_file(path: Path) -> str:

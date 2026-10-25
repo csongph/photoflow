@@ -19,7 +19,7 @@ from ..uploader.storage import GoogleAuthorizationExpired, env_provider
 log = logging.getLogger("photoflow")
 
 
-REQUIRED_GALLERY_UPLOADS = {"finished"}
+REQUIRED_GALLERY_UPLOADS = {"finished", "preview", "thumbnail"}
 
 
 def drive_required(event: Event) -> bool:
@@ -168,16 +168,19 @@ class JobWorker:
             photo.error = str(exc)
             db.commit()
             return
-        if photo.finished_path:
-            upload = (
-                db.query(Upload)
-                .filter(Upload.photo_id == photo.id, Upload.variant == "finished", Upload.local_path == photo.finished_path)
-                .first()
-            )
+        for variant, local_path in (("finished", photo.finished_path), ("preview", photo.preview_path), ("thumbnail", photo.thumbnail_path)):
+            if not local_path:
+                continue
+            upload = db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant == variant).first()
             if not upload:
-                upload = Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=photo.finished_path)
+                upload = Upload(event_id=event.id, photo_id=photo.id, variant=variant, local_path=local_path)
                 db.add(upload)
                 db.flush()
+            else:
+                upload.local_path = local_path
+                upload.object_id = ""
+                upload.state = "QUEUED"
+                upload.error = ""
             db.add(Job(event_id=event.id, photo_id=photo.id, type="UPLOAD_VARIANT", priority=30, payload_json=json.dumps({"upload_id": upload.id})))
         if drive_required(event) and self._required_uploads_done(db, photo.id):
             if auto_publish_enabled(event) and not event.publishing_paused:
@@ -226,6 +229,7 @@ class JobWorker:
         upload.state = "UPLOADED"
         upload.object_id = result["id"]
         upload.error = ""
+        all_gallery_files_uploaded = False
         if photo:
             photo.storage_provider = provider.name
             if upload.variant == "finished":
@@ -237,11 +241,21 @@ class JobWorker:
             # SessionLocal disables autoflush, so persist the completed upload
             # before checking whether every required file is ready to publish.
             db.flush()
-            if event and drive_required(event) and self._required_uploads_done(db, photo.id) and not photo.published:
+            all_gallery_files_uploaded = bool(event and drive_required(event) and self._required_uploads_done(db, photo.id))
+            if all_gallery_files_uploaded and not photo.published:
                 if auto_publish_enabled(event):
                     db.add(Job(event_id=event.id, photo_id=photo.id, type="PUBLISH_PHOTO", priority=70))
                 else:
                     photo.status = "AWAITING_REVIEW"
+            elif all_gallery_files_uploaded and photo.published and cloud_sync_enabled():
+                pending_sync = db.query(Job).filter(
+                    Job.event_id == event.id,
+                    Job.photo_id == photo.id,
+                    Job.type == "SYNC_PHOTO",
+                    Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"]),
+                ).first()
+                if not pending_sync:
+                    db.add(Job(event_id=event.id, photo_id=photo.id, type="SYNC_PHOTO", priority=60))
         db.commit()
 
     def _publish_photo(self, db, job: Job) -> None:

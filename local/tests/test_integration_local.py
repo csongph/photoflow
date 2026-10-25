@@ -5,6 +5,7 @@ from pathlib import Path
 
 from PIL import Image
 from PIL import ImageChops
+from starlette.requests import Request
 
 from local.app.database import Base, SessionLocal, engine, init_db
 from local.app.models import Event, Job, Photo, Setting, Upload
@@ -64,6 +65,25 @@ def test_process_photo_preserves_original_and_creates_variants(tmp_path: Path):
         assert Path(photo.thumbnail_path).exists()
         assert photo.status == "PROCESSED"
     assert sha256_file(original) == before
+
+
+def test_frame_is_baked_into_finished_preview_and_thumbnail(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    original = Path(event.root_path) / "ORIGINAL" / "framed.jpg"
+    Image.new("RGB", (800, 600), "white").save(original, "JPEG", quality=95)
+    Image.new("RGBA", (600, 400), (255, 0, 0, 128)).save(Path(event.root_path) / "CACHE" / "photobooth-frame-landscape.png")
+    with SessionLocal() as db:
+        event = db.get(Event, event.id)
+        event.gallery_json = json.dumps({"photobooth_frame_enabled": True})
+        photo = Photo(event_id=event.id, capture_id="framed", filename="framed.jpg", original_path=str(original), checksum=sha256_file(original), file_size=original.stat().st_size, status="BACKED_UP")
+        db.add(photo)
+        db.commit()
+        process_photo(db, event, photo)
+        for image_path in (photo.finished_path, photo.preview_path, photo.thumbnail_path):
+            with Image.open(image_path) as rendered:
+                red, green, blue = rendered.convert("RGB").getpixel((rendered.width // 2, rendered.height // 2))
+                assert red > green and red > blue
 
 
 def test_cloud_event_poll_imports_metadata_idempotently(tmp_path: Path):
@@ -151,9 +171,9 @@ def test_upload_jobs_get_persistent_upload_ids(tmp_path: Path):
         worker._process_photo(db, job)
         upload_jobs = db.query(Job).filter(Job.type == "UPLOAD_VARIANT").all()
         uploads = db.query(Upload).all()
-        assert len(upload_jobs) == 1
-        assert len(uploads) == 1
-        assert uploads[0].variant == "finished"
+        assert len(upload_jobs) == 3
+        assert len(uploads) == 3
+        assert {upload.variant for upload in uploads} == {"finished", "preview", "thumbnail"}
         assert all(json.loads(row.payload_json)["upload_id"] for row in upload_jobs)
 
 
@@ -172,11 +192,11 @@ def test_drive_required_event_waits_for_uploads_before_publish(tmp_path: Path):
         job = Job(event_id=event.id, photo_id=photo.id, type="PROCESS_PHOTO")
         worker = JobWorker(1)
         worker._process_photo(db, job)
-        assert db.query(Job).filter(Job.type == "UPLOAD_VARIANT").count() == 1
+        assert db.query(Job).filter(Job.type == "UPLOAD_VARIANT").count() == 3
         assert db.query(Job).filter(Job.type == "PUBLISH_PHOTO").count() == 0
 
 
-def test_finished_upload_is_enough_for_manual_publish(tmp_path: Path):
+def test_all_gallery_variant_uploads_are_required_for_manual_publish(tmp_path: Path):
     reset_db()
     event = make_event(tmp_path)
     with SessionLocal() as db:
@@ -194,14 +214,15 @@ def test_finished_upload_is_enough_for_manual_publish(tmp_path: Path):
         )
         db.add(photo)
         db.flush()
-        db.add(Upload(
-            event_id=event.id,
-            photo_id=photo.id,
-            variant="finished",
-            local_path=photo.finished_path,
-            state="UPLOADED",
-            object_id="drive-file-id",
-        ))
+        for variant in ("finished", "preview", "thumbnail"):
+            db.add(Upload(
+                event_id=event.id,
+                photo_id=photo.id,
+                variant=variant,
+                local_path=getattr(photo, f"{variant}_path"),
+                state="UPLOADED",
+                object_id=f"drive-{variant}-id",
+            ))
         db.commit()
 
         from local.app.routers.events import required_uploads_done
@@ -227,14 +248,15 @@ def test_worker_recovers_uploaded_photo_for_auto_publish(tmp_path: Path):
         )
         db.add(photo)
         db.flush()
-        db.add(Upload(
-            event_id=event.id,
-            photo_id=photo.id,
-            variant="finished",
-            local_path=photo.finished_path,
-            state="UPLOADED",
-            object_id="recovery-drive-id",
-        ))
+        for variant in ("finished", "preview", "thumbnail"):
+            db.add(Upload(
+                event_id=event.id,
+                photo_id=photo.id,
+                variant=variant,
+                local_path=getattr(photo, f"{variant}_path"),
+                state="UPLOADED",
+                object_id=f"recovery-{variant}-id",
+            ))
         db.commit()
         photo_id = photo.id
 
@@ -395,7 +417,8 @@ def test_gallery_uses_local_media_for_display_and_drive_for_download(tmp_path: P
         db.add(Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=str(finished), state="UPLOADED", object_id="finished-drive-id"))
         db.commit()
 
-        rows = gallery_photos(event.public_id, db=db)
+        request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "server": ("localhost", 80), "client": ("localhost", 1), "scheme": "http"})
+        rows = gallery_photos(event.public_id, request=request, db=db)
         variants = {item["kind"]: item for item in rows[0]["variants"]}
         assert variants["thumbnail"]["url"].startswith(f"/media/{event.id}/THUMBNAILS/")
         assert variants["preview"]["url"].startswith(f"/media/{event.id}/PREVIEWS/")
@@ -536,15 +559,16 @@ def test_successful_drive_upload_queues_auto_publish(tmp_path: Path, monkeypatch
         )
         db.add(photo)
         db.flush()
-        upload = Upload(event_id=event.id, photo_id=photo.id, variant="finished", local_path=str(variant))
-        db.add(upload)
-        db.flush()
-        db.add(Job(
-            event_id=event.id,
-            photo_id=photo.id,
-            type="UPLOAD_VARIANT",
-            payload_json=json.dumps({"upload_id": upload.id}),
-        ))
+        for variant_name in ("finished", "preview", "thumbnail"):
+            upload = Upload(event_id=event.id, photo_id=photo.id, variant=variant_name, local_path=str(variant))
+            db.add(upload)
+            db.flush()
+            db.add(Job(
+                event_id=event.id,
+                photo_id=photo.id,
+                type="UPLOAD_VARIANT",
+                payload_json=json.dumps({"upload_id": upload.id}),
+            ))
         db.commit()
         photo_id = photo.id
 
@@ -552,7 +576,7 @@ def test_successful_drive_upload_queues_auto_publish(tmp_path: Path, monkeypatch
     assert worker._handle_one()
 
     with SessionLocal() as db:
-        upload = db.query(Upload).filter(Upload.photo_id == photo_id).one()
+        upload = db.query(Upload).filter(Upload.photo_id == photo_id, Upload.variant == "finished").one()
         publish_jobs = db.query(Job).filter(
             Job.photo_id == photo_id,
             Job.type == "PUBLISH_PHOTO",
@@ -560,8 +584,17 @@ def test_successful_drive_upload_queues_auto_publish(tmp_path: Path, monkeypatch
         ).all()
         assert upload.state == "UPLOADED"
         assert upload.object_id == "uploaded-drive-id"
-        assert len(publish_jobs) == 1
+        assert len(publish_jobs) == 0
 
+    assert worker._handle_one()
+    assert worker._handle_one()
+    with SessionLocal() as db:
+        publish_jobs = db.query(Job).filter(
+            Job.photo_id == photo_id,
+            Job.type == "PUBLISH_PHOTO",
+            Job.state == "QUEUED",
+        ).all()
+        assert len(publish_jobs) == 1
     assert worker._handle_one()
 
     with SessionLocal() as db:

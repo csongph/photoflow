@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import time
+from threading import Lock
 from pathlib import Path
 
 import qrcode
@@ -19,6 +20,10 @@ from ..utils.public_url import public_gallery_url
 router = APIRouter(prefix="/api/gallery", tags=["local-gallery"])
 PIN_COOKIE = "momentlink_gallery_access"
 PIN_TTL_SECONDS = 12 * 60 * 60
+PIN_ATTEMPTS = 8
+PIN_WINDOW_SECONDS = 300
+_pin_failures: dict[tuple[str, str], list[float]] = {}
+_pin_failures_lock = Lock()
 
 
 def drive_download_url(file_id: str) -> str:
@@ -78,10 +83,28 @@ def cookie_pin_ok(event: Event, request: Request) -> bool:
         return False
 
 
-def has_gallery_access(event: Event, request: Request, pin: str = "") -> bool:
+def has_gallery_access(event: Event, request: Request) -> bool:
     if not gallery_pin(event):
         return True
-    return cookie_pin_ok(event, request) or bool(pin and pin_ok(event, pin))
+    return cookie_pin_ok(event, request)
+
+
+def check_pin_rate(request: Request, public_id: str) -> int:
+    key = (request.client.host if request.client else "unknown", public_id)
+    now = time.monotonic()
+    with _pin_failures_lock:
+        attempts = [stamp for stamp in _pin_failures.get(key, []) if now - stamp < PIN_WINDOW_SECONDS]
+        _pin_failures[key] = attempts
+        return max(1, int(PIN_WINDOW_SECONDS - (now - attempts[0]))) if len(attempts) >= PIN_ATTEMPTS else 0
+
+
+def record_pin_failure(request: Request, public_id: str) -> None:
+    key = (request.client.host if request.client else "unknown", public_id)
+    now = time.monotonic()
+    with _pin_failures_lock:
+        attempts = [stamp for stamp in _pin_failures.get(key, []) if now - stamp < PIN_WINDOW_SECONDS]
+        attempts.append(now)
+        _pin_failures[key] = attempts
 
 
 def grant_pin_access(event: Event, request: Request, response: Response, pin: str) -> bool:
@@ -95,16 +118,31 @@ def grant_pin_access(event: Event, request: Request, response: Response, pin: st
     return True
 
 
+@router.post("/{public_id}/unlock")
+def unlock_gallery(public_id: str, payload: dict, request: Request, response: Response, db: Session = Depends(get_db)):
+    event = event_by_public_id(db, public_id)
+    retry_after = check_pin_rate(request, public_id)
+    if retry_after:
+        raise HTTPException(429, "ลองใส่ PIN ผิดหลายครั้ง กรุณารอสักครู่", headers={"Retry-After": str(retry_after)})
+    pin = payload.get("pin") if isinstance(payload, dict) else None
+    if not isinstance(pin, str) or len(pin) > 64 or not grant_pin_access(event, request, response, pin):
+        record_pin_failure(request, public_id)
+        raise HTTPException(403, "PIN ไม่ถูกต้อง")
+    with _pin_failures_lock:
+        _pin_failures.pop((request.client.host if request.client else "unknown", public_id), None)
+    return {"ok": True}
+
+
 def require_gallery_access(event: Event, pin: str = "") -> None:
     if not pin_ok(event, pin):
         raise HTTPException(403, "ต้องใส่ PIN ก่อนดูรูปใน Gallery นี้")
 
 
 @router.get("/{public_id}")
-def gallery(public_id: str, request: Request, response: Response, pin: str = "", db: Session = Depends(get_db)):
+def gallery(public_id: str, request: Request, db: Session = Depends(get_db)):
     event = event_by_public_id(db, public_id)
     settings = gallery_settings(event)
-    locked = not grant_pin_access(event, request, response, pin)
+    locked = not has_gallery_access(event, request)
     count = 0 if locked else db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).count()
     return {
         "event": {
@@ -135,10 +173,9 @@ def gallery_qr(public_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, page: int = 1, page_size: int = 60, pin: str = "", db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
     event = event_by_public_id(db, public_id)
-    request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "server": ("localhost", 80), "client": ("localhost", 1), "scheme": "http"})
-    if not has_gallery_access(event, request, pin):
+    if not has_gallery_access(event, request):
         require_gallery_access(event)
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
@@ -178,7 +215,7 @@ def photos(public_id: str, page: int = 1, page_size: int = 60, pin: str = "", db
 @router.get("/{public_id}/photos/{photo_id}/download")
 def download_photo(public_id: str, photo_id: str, request: Request, response: Response, db: Session = Depends(get_db)):
     event = event_by_public_id(db, public_id)
-    if not grant_pin_access(event, request, response, ""):
+    if not has_gallery_access(event, request):
         require_gallery_access(event)
     if not gallery_settings(event).get("allow_download", True):
         raise HTTPException(403, "Downloads are disabled")

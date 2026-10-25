@@ -78,12 +78,17 @@ def can_publish_from_disk(photo: Photo) -> bool:
 
 
 def required_uploads_done(db: Session, photo_id: str) -> bool:
-    return db.query(Upload).filter(
-        Upload.photo_id == photo_id,
-        Upload.variant == "finished",
-        Upload.state == "UPLOADED",
-        Upload.object_id != "",
-    ).first() is not None
+    required = {"finished", "preview", "thumbnail"}
+    uploaded = {
+        row.variant
+        for row in db.query(Upload).filter(
+            Upload.photo_id == photo_id,
+            Upload.variant.in_(required),
+            Upload.state == "UPLOADED",
+            Upload.object_id != "",
+        )
+    }
+    return required.issubset(uploaded)
 
 
 def ensure_photo(event_id: str, photo_id: str, db: Session) -> Photo:
@@ -691,7 +696,7 @@ def reprocess_photos(event_id: str, db: Session = Depends(get_db)):
         photo.status = "QUEUED"
         photo.error = ""
         photo.published = False
-        for upload in db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant == "finished").all():
+        for upload in db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant.in_(["finished", "preview", "thumbnail"])).all():
             upload.state = "QUEUED"
             upload.object_id = ""
             upload.error = ""
@@ -699,6 +704,35 @@ def reprocess_photos(event_id: str, db: Session = Depends(get_db)):
         count += 1
     db.commit()
     return {"ok": True, "queued": count}
+
+
+@router.post("/{event_id}/photos/reupload-gallery-variants")
+def reupload_gallery_variants(event_id: str, db: Session = Depends(get_db)):
+    """Rebuild Drive thumbnail/preview/finished assets for existing processed photos."""
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not event_drive_required(event):
+        return {"ok": True, "queued": 0, "message": "Google Drive upload is disabled for this event"}
+    queued = 0
+    for photo in db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).all():
+        variants = (("finished", photo.finished_path), ("preview", photo.preview_path), ("thumbnail", photo.thumbnail_path))
+        if not all(path and Path(path).is_file() for _, path in variants):
+            continue
+        for variant, local_path in variants:
+            upload = db.query(Upload).filter(Upload.photo_id == photo.id, Upload.variant == variant).first()
+            if not upload:
+                upload = Upload(event_id=event.id, photo_id=photo.id, variant=variant, local_path=local_path)
+                db.add(upload)
+                db.flush()
+            upload.local_path = local_path
+            upload.object_id = ""
+            upload.state = "QUEUED"
+            upload.error = ""
+            db.add(Job(event_id=event.id, photo_id=photo.id, type="UPLOAD_VARIANT", priority=25, payload_json=json.dumps({"upload_id": upload.id})))
+        queued += 1
+    db.commit()
+    return {"ok": True, "queued": queued}
 
 
 @router.get("/{event_id}/failed-jobs")
