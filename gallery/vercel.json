@@ -3,6 +3,10 @@
   "cleanUrls": true,
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://photoflow-thcz.onrender.com/api/:path*"
+    },
+    {
       "source": "/gallery/:path*",
       "destination": "/index.html"
     },
