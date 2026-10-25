@@ -8,8 +8,10 @@ from datetime import datetime
 from pathlib import Path
 
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
+from PIL import Image
+from io import BytesIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -198,10 +200,86 @@ def import_event_folder(db: Session, folder: Path) -> tuple[Event | None, int]:
     return event, import_finished_photos(db, event)
 
 
+def import_cloud_events(db: Session, rows: list[dict]) -> dict[str, int]:
+    """Idempotently mirror cloud event/photo metadata without copying originals."""
+    created = updated = photo_count = 0
+    root = ensure_event_root(db)
+    for remote in rows:
+        public_id = str(remote.get("public_id") or "").strip()
+        name = str(remote.get("name") or "").strip()
+        if not public_id or not name or len(name) > 180:
+            continue
+        event = db.query(Event).filter(Event.public_id == public_id).first()
+        if event and not gallery_settings(event).get("cloud_mirror"):
+            continue
+        if not event:
+            slug = safe_slug(name)
+            folder = root / f"cloud_{slug}_{secrets.token_hex(4)}"
+            for dirname in EVENT_DIRS:
+                (folder / dirname).mkdir(parents=True, exist_ok=True)
+            event = Event(
+                public_id=public_id,
+                name=name,
+                description=str(remote.get("description") or "")[:10000],
+                event_date=str(remote.get("event_date") or "")[:20],
+                slug=slug,
+                status="CLOUD",
+                root_path=str(folder),
+                incoming_path=str(folder / "INCOMING"),
+                preset_id="neutral",
+                processing_profile="Passthrough",
+                auto_correction_json="{}",
+                gallery_json=json.dumps({"cloud_mirror": True, **(remote.get("gallery_settings") if isinstance(remote.get("gallery_settings"), dict) else {})}),
+                drive_json="{}",
+            )
+            db.add(event)
+            db.flush()
+            atomic_json(folder / "event.json", {"id": event.id, "public_id": public_id, "event": {"name": name}, "paths": {"root": str(folder), "incoming": str(folder / "INCOMING")}, "source": "cloud"})
+            created += 1
+        else:
+            event.name = name
+            event.description = str(remote.get("description") or "")[:10000]
+            event.event_date = str(remote.get("event_date") or "")[:20]
+            settings_payload = remote.get("gallery_settings") if isinstance(remote.get("gallery_settings"), dict) else {}
+            settings_payload["cloud_mirror"] = True
+            event.gallery_json = json.dumps(settings_payload)
+            updated += 1
+
+        existing = {photo.capture_id: photo for photo in db.query(Photo).filter(Photo.event_id == event.id).all()}
+        for item in remote.get("photos") if isinstance(remote.get("photos"), list) else []:
+            if not isinstance(item, dict):
+                continue
+            capture_id = str(item.get("local_photo_id") or "").strip()[:220]
+            filename = str(item.get("filename") or "").strip()[:260]
+            if not capture_id or not filename:
+                continue
+            photo = existing.get(capture_id)
+            if not photo:
+                photo = Photo(event_id=event.id, capture_id=capture_id, filename=filename, checksum=secrets.token_hex(32), status="PUBLISHED" if item.get("published") else "CLOUD", published=item.get("published") is True, hidden=item.get("hidden") is True)
+                db.add(photo)
+                db.flush()
+                photo_count += 1
+            photo.storage_provider = str(item.get("storage_provider") or "")[:60]
+            photo.storage_object_id = str(item.get("storage_object_id") or "")[:300]
+    db.commit()
+    return {"created": created, "updated": updated, "photos": photo_count}
+
+
 @router.get("")
 def list_events(db: Session = Depends(get_db)):
     events = db.query(Event).order_by(Event.created_at.desc()).all()
     return [to_out(db, e) for e in events]
+
+
+@router.post("/sync-cloud")
+def sync_cloud_now(db: Session = Depends(get_db)):
+    from ..sync.cloud import CloudSyncError, list_cloud_events
+
+    try:
+        result = import_cloud_events(db, list_cloud_events(strict=True))
+    except CloudSyncError as exc:
+        raise HTTPException(502, f"ดึงรายการ Event จาก Cloud ไม่สำเร็จ: {exc}") from exc
+    return {"ok": True, **result}
 
 
 @router.get("/importable")
@@ -288,6 +366,49 @@ def create_event(payload: EventCreate, db: Session = Depends(get_db)):
         enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
         db.commit()
     return to_out(db, event)
+
+
+@router.post("/{event_id}/photobooth-frame")
+async def upload_photobooth_frame(
+    event_id: str,
+    frame: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not (frame.filename or "").lower().endswith(".png"):
+        raise HTTPException(415, "กรอบโฟโต้บูทต้องเป็นไฟล์ PNG ที่มีพื้นหลังโปร่งใส")
+    content = await frame.read(20 * 1024 * 1024 + 1)
+    if len(content) > 20 * 1024 * 1024:
+        raise HTTPException(413, "ไฟล์กรอบต้องมีขนาดไม่เกิน 20 MB")
+    try:
+        with Image.open(BytesIO(content)) as source:
+            if source.format != "PNG":
+                raise HTTPException(415, "รองรับเฉพาะไฟล์ PNG")
+            source.load()
+            rgba = source.convert("RGBA")
+            if min(rgba.getchannel("A").getextrema()) == 255:
+                raise HTTPException(422, "PNG ต้องมีส่วนโปร่งใสเพื่อให้เห็นภาพถ่ายด้านใน")
+            if rgba.width < 300 or rgba.height < 300 or rgba.width > 8000 or rgba.height > 8000:
+                raise HTTPException(422, "ขนาดกรอบต้องอยู่ระหว่าง 300 ถึง 8000 พิกเซลต่อด้าน")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, "อ่านไฟล์ PNG ไม่ได้ กรุณาเลือกไฟล์กรอบที่ถูกต้อง") from exc
+
+    frame_path = Path(event.root_path) / "CACHE" / "photobooth-frame.png"
+    frame_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = frame_path.with_suffix(".tmp.png")
+    rgba.save(temp_path, format="PNG", optimize=True)
+    temp_path.replace(frame_path)
+    gallery = gallery_settings(event)
+    gallery["photobooth_frame_enabled"] = True
+    event.gallery_json = json.dumps(gallery)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+    db.commit()
+    return {"ok": True, "filename": frame_path.name, "width": rgba.width, "height": rgba.height}
 
 
 @router.post("/{event_id}/start")
@@ -385,11 +506,13 @@ def delete_event(event_id: str, delete_files: bool = Query(False), db: Session =
     if not event:
         raise HTTPException(404, "Event not found")
 
+    # Clear the public URL before removing local data. This fails closed if
+    # the cloud still serves the gallery, while retrying a timed-out delete is safe.
     if cloud_sync_enabled():
         try:
             delete_cloud_event(event.public_id, strict=True)
         except CloudSyncError as exc:
-            raise HTTPException(502, f"ยังลบ Gallery ออนไลน์ไม่ได้ กรุณาตรวจ Cloud แล้วลองใหม่: {exc}") from exc
+            raise HTTPException(502, f"ยังยืนยันการปิด Gallery ออนไลน์ไม่ได้: {exc}") from exc
 
     watcher_manager.stop_event(event.id)
     root = Path(event.root_path).resolve()

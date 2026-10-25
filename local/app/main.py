@@ -51,7 +51,12 @@ app.add_middleware(
 
 @app.middleware("http")
 async def admin_auth_middleware(request: Request, call_next):
-    return await require_admin(request, call_next)
+    response = await require_admin(request, call_next)
+    if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    return response
 
 
 @app.get("/login")

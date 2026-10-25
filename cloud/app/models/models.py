@@ -23,6 +23,7 @@ class Event(Base):
     pin_hash: Mapped[str] = mapped_column(String(200), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    photos: Mapped[list["Photo"]] = relationship(back_populates="event", cascade="all, delete-orphan")
 
 
 class Photo(Base):
@@ -38,6 +39,8 @@ class Photo(Base):
     published: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     hidden: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    event: Mapped[Event] = relationship(back_populates="photos")
+    variants: Mapped[list["PhotoVariant"]] = relationship(cascade="all, delete-orphan")
 
 
 class PhotoVariant(Base):

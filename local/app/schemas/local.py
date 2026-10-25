@@ -12,6 +12,7 @@ class GallerySettings(BaseModel):
     optional_pin: str = ""
     credit_text: str = "ถ่ายภาพโดยทีมโสตโรงเรียน"
     report_contact: str = ""
+    photobooth_frame_enabled: bool = False
 
 
 class DriveSettings(BaseModel):

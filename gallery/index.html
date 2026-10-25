@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>MomentLink Gallery</title>
-  <link rel="stylesheet" href="/css/gallery.css?v=20261024-school-32">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261025-gallery-35">
 </head>
 <body>
   <header class="hero" id="hero">
@@ -59,6 +59,9 @@
       </div>
       <div class="toolbar">
         <span id="syncState">อัปเดตอัตโนมัติ</span>
+        <button id="selectModeBtn" class="icon-button" onclick="toggleSelectionMode()" aria-pressed="false">เลือกหลายรูป</button>
+        <span id="selectedCount" class="selected-count" hidden>เลือก 0 รูป</span>
+        <button id="downloadSelectedBtn" class="icon-button" onclick="downloadSelectedPhotos()" disabled hidden>ดาวน์โหลดที่เลือก</button>
         <button class="icon-button" onclick="loadPhotos(true)" title="โหลดรูปใหม่">รีเฟรช</button>
       </div>
     </section>
@@ -89,7 +92,7 @@
 
   <div id="lightbox" class="modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
   <script src="/api/config.js"></script>
-  <script src="/js/gallery.js?v=20261024-school-32"></script>
+  <script src="/js/gallery.js?v=20261025-gallery-35"></script>
   <script>initGallery()</script>
 </body>
 </html>

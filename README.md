@@ -66,6 +66,8 @@ PUBLIC_GALLERY_BASE_URL=https://your-gallery.example.com
 CLOUD_API_URL=https://your-cloud-api.example.com
 ```
 
+เมื่อกำหนด `CLOUD_API_URL` และ `CLOUD_SYNC_TOKEN` แล้ว Local จะตรวจรายการ Event บน Cloud ทุก 60 วินาที และ mirror Event/สถานะรูปเข้าฐานข้อมูลในเครื่องโดยอัตโนมัติ ปรับช่วงเวลาได้ด้วย `CLOUD_EVENT_POLL_SECONDS` (อย่างน้อย 30 วินาที) การ mirror นี้นำเข้า metadata เท่านั้น ไฟล์ภาพเต็มยังเก็บใน Google Drive ตามเดิม
+
 ## แก้ปัญหาเบื้องต้น
 
 - Port 8000 ถูกใช้อยู่: ปิด app อื่น หรือแก้ `LOCAL_PORT` และปรับ `run.bat`

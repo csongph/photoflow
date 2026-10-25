@@ -5,6 +5,8 @@ import hashlib
 import hmac
 import os
 import time
+from collections import defaultdict, deque
+from threading import Lock
 from urllib.parse import parse_qs, quote
 
 from fastapi import Request
@@ -13,6 +15,10 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 
 COOKIE_NAME = "momentlink_admin"
 SESSION_TTL_SECONDS = 12 * 60 * 60
+_login_attempts: dict[str, deque[float]] = defaultdict(deque)
+_login_attempts_lock = Lock()
+LOGIN_WINDOW_SECONDS = 300
+LOGIN_MAX_ATTEMPTS = 8
 
 
 def admin_password() -> str:
@@ -427,8 +433,22 @@ async def login(request: Request) -> Response:
     form = parse_qs(body)
     password = form.get("password", [""])[0]
     next_path = form.get("next", ["/"])[0]
+    peer = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    with _login_attempts_lock:
+        attempts = _login_attempts[peer]
+        while attempts and now - attempts[0] > LOGIN_WINDOW_SECONDS:
+            attempts.popleft()
+        if len(attempts) >= LOGIN_MAX_ATTEMPTS:
+            response = login_page("ลองเข้าสู่ระบบหลายครั้งเกินไป กรุณารอ 5 นาที")
+            response.status_code = 429
+            return response
     if not hmac.compare_digest(password, admin_password()):
+        with _login_attempts_lock:
+            _login_attempts[peer].append(now)
         return login_page("รหัสผ่านไม่ถูกต้อง")
+    with _login_attempts_lock:
+        _login_attempts.pop(peer, None)
     safe_next = next_path if next_path.startswith("/") and not next_path.startswith("//") else "/"
     response = RedirectResponse(safe_next, status_code=303)
     response.set_cookie(

@@ -14,6 +14,40 @@ from ..models import Event, FaceSearchSession, GallerySettings, Photo, PhotoFace
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
 
+def event_out(event: Event, settings: GallerySettings | None) -> dict:
+    return {
+        "public_id": event.public_id,
+        "name": event.name,
+        "event_date": event.event_date,
+        "description": event.description,
+        "pin_hash": event.pin_hash,
+        "gallery_settings": {
+            "pin_hash": event.pin_hash,
+            "enable_gallery": settings.enabled if settings else True,
+            "allow_download": settings.allow_download if settings else True,
+            "auto_refresh": settings.auto_refresh if settings else True,
+            "credit_text": settings.credit_text if settings else "",
+            "report_contact": settings.report_contact if settings else "",
+        },
+        "photos": [
+            {
+                "local_photo_id": photo.local_photo_id,
+                "filename": photo.filename,
+                "capture_id": photo.capture_id,
+                "storage_provider": photo.storage_provider,
+                "storage_object_id": photo.storage_object_id,
+                "published": photo.published,
+                "hidden": photo.hidden,
+                "variants": [
+                    {"kind": row.kind, "storage_provider": row.storage_provider, "storage_object_id": row.storage_object_id, "width": row.width, "height": row.height}
+                    for row in photo.variants
+                ],
+            }
+            for photo in event.photos
+        ],
+    }
+
+
 def pin_hash(value: str) -> str:
     value = value.strip()
     return hashlib.sha256(value.encode("utf-8")).hexdigest() if value else ""
@@ -42,20 +76,48 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
         raise HTTPException(422, "Invalid event name")
     event = db.query(Event).filter(Event.public_id == public_id).first() or Event(public_id=public_id)
     event.name = name
-    event.event_date = payload.get("event_date", "")
-    event.description = payload.get("description", "")
+    event_date = str(payload.get("event_date") or "").strip()
+    description = str(payload.get("description") or "").strip()
+    if len(event_date) > 20 or len(description) > 10000:
+        raise HTTPException(422, "Invalid event metadata")
+    event.event_date = event_date
+    event.description = description
     incoming_settings = payload.get("gallery_settings")
     incoming_settings = incoming_settings if isinstance(incoming_settings, dict) else {}
-    event.pin_hash = pin_hash(str(incoming_settings.get("optional_pin") or ""))
+    incoming_pin_hash = str(incoming_settings.get("pin_hash") or "").strip()
+    if incoming_pin_hash and (len(incoming_pin_hash) != 64 or any(ch not in "0123456789abcdef" for ch in incoming_pin_hash.lower())):
+        raise HTTPException(422, "Invalid gallery PIN hash")
+    event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
     db.add(event)
     db.flush()
     allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact"}
     gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
-    gallery_settings["enabled"] = bool(incoming_settings.get("enable_gallery", True))
+    enabled = incoming_settings.get("enable_gallery", True)
+    if not isinstance(enabled, bool):
+        raise HTTPException(422, "Invalid gallery setting: enable_gallery")
+    gallery_settings["enabled"] = enabled
     gallery_settings["find_my_photos"] = False
+    for key in ("allow_download", "auto_refresh"):
+        if key in incoming_settings:
+            if not isinstance(incoming_settings[key], bool):
+                raise HTTPException(422, f"Invalid gallery setting: {key}")
+            gallery_settings[key] = incoming_settings[key]
+    for key, limit in (("credit_text", 220), ("report_contact", 220)):
+        value = incoming_settings.get(key, "")
+        if not isinstance(value, str) or len(value) > limit:
+            raise HTTPException(422, f"Invalid gallery setting: {key}")
     db.merge(GallerySettings(event_id=event.id, **gallery_settings))
     db.commit()
     return {"event_id": event.id, "public_id": event.public_id}
+
+
+@router.get("/events")
+def list_cloud_events(db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    events = db.query(Event).order_by(Event.updated_at.desc()).all()
+    result = []
+    for event in events:
+        result.append(event_out(event, db.get(GallerySettings, event.id)))
+    return result
 
 
 @router.post("/photo")
@@ -80,19 +142,26 @@ def sync_photo(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     photo.capture_id = capture_id
     photo.storage_provider = storage_provider
     photo.storage_object_id = storage_object_id
-    photo.published = bool(payload.get("published", getattr(photo, "published", False)))
-    photo.hidden = bool(payload.get("hidden", getattr(photo, "hidden", False)))
+    for key in ("published", "hidden"):
+        if key in payload and not isinstance(payload[key], bool):
+            raise HTTPException(422, f"Invalid photo field: {key}")
+    photo.published = payload.get("published", getattr(photo, "published", False))
+    photo.hidden = payload.get("hidden", getattr(photo, "hidden", False))
     db.add(photo)
     db.flush()
     variants = payload.get("variants") if isinstance(payload.get("variants"), list) else []
+    if len(variants) > 5:
+        raise HTTPException(422, "Too many photo variants")
+    seen_kinds: set[str] = set()
     for variant in variants:
         if not isinstance(variant, dict):
             continue
         kind = str(variant.get("kind") or "finished").strip()
         provider = str(variant.get("storage_provider") or storage_provider).strip()
         object_id = str(variant.get("storage_object_id") or "").strip()
-        if not kind or len(kind) > 30 or not object_id or len(provider) > 60 or len(object_id) > 300:
-            continue
+        if kind not in {"finished", "preview", "thumbnail"} or kind in seen_kinds or not object_id or len(provider) > 60 or len(object_id) > 300:
+            raise HTTPException(422, "Invalid photo variant")
+        seen_kinds.add(kind)
         row = db.query(PhotoVariant).filter(PhotoVariant.photo_id == photo.id, PhotoVariant.kind == kind).first()
         if not row:
             row = PhotoVariant(photo_id=photo.id, kind=kind)
@@ -102,7 +171,9 @@ def sync_photo(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
             width = max(0, int(variant.get("width") or 0))
             height = max(0, int(variant.get("height") or 0))
         except (TypeError, ValueError):
-            continue
+            raise HTTPException(422, "Invalid photo variant dimensions")
+        if width > 100000 or height > 100000:
+            raise HTTPException(422, "Invalid photo variant dimensions")
         row.storage_provider = provider
         row.storage_object_id = object_id
         row.width = width
@@ -117,6 +188,8 @@ def delete_event(public_id: str, db: Session = Depends(get_db), _: None = Depend
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         return {"ok": True, "deleted": False}
+    # Child rows use ON DELETE CASCADE; deleting the parent lets PostgreSQL
+    # remove all associated gallery and face metadata atomically.
     photo_ids = [row[0] for row in db.query(Photo.id).filter(Photo.event_id == event.id).all()]
     if photo_ids:
         db.query(PhotoVariant).filter(PhotoVariant.photo_id.in_(photo_ids)).delete(synchronize_session=False)

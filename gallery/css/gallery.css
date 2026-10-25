@@ -390,6 +390,50 @@ button.dark {
 }
 .gallery-footer strong { color: var(--ink); }
 
+.toolbar { flex-wrap: wrap; }
+.toolbar [hidden] { display: none !important; }
+.selected-count {
+  padding: 7px 10px;
+  border: 1px solid rgba(52,199,154,.28);
+  border-radius: 999px;
+  color: #dff9ea;
+  background: rgba(52,199,154,.12);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.photo.selected { outline: 4px solid var(--accent); outline-offset: -4px; }
+.photo-select-mark {
+  position: absolute;
+  z-index: 2;
+  top: 10px;
+  right: 10px;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 2px solid rgba(255,255,255,.82);
+  border-radius: 50%;
+  color: transparent;
+  background: rgba(10,15,12,.42);
+  opacity: .3;
+  transition: opacity .16s ease, background .16s ease, color .16s ease;
+}
+.photo.selected .photo-select-mark {
+  color: #0b1710;
+  background: #75e1ae;
+  border-color: #75e1ae;
+  opacity: 1;
+}
+.photo:hover .photo-select-mark { opacity: .9; }
+
+@media (max-width: 700px) {
+  .toolbar { width: 100%; justify-content: flex-start; }
+  .toolbar #syncState { flex: 1 0 100%; }
+  .toolbar button { flex: 1 1 auto; min-height: 42px; }
+  .selected-count { flex: 0 0 auto; }
+}
+
 @media (min-width: 700px) {
   .hero { padding: 24px; }
   .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }

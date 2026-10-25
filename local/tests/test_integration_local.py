@@ -11,7 +11,7 @@ from local.app.models import Event, Job, Photo, Setting, Upload
 from local.app.processing.pipeline import process_photo
 from local.app.queue.worker import JobWorker, recover_jobs
 from local.app.queue.worker import drive_filename
-from local.app.routers.events import delete_event, import_finished_photos, retry_failed_job
+from local.app.routers.events import delete_event, import_cloud_events, import_finished_photos, retry_failed_job
 from local.app.routers.events import publish_photo, update_photo_visibility
 from local.app.routers.gallery import pin_ok
 from local.app.routers.gallery import photos as gallery_photos
@@ -64,6 +64,35 @@ def test_process_photo_preserves_original_and_creates_variants(tmp_path: Path):
         assert Path(photo.thumbnail_path).exists()
         assert photo.status == "PROCESSED"
     assert sha256_file(original) == before
+
+
+def test_cloud_event_poll_imports_metadata_idempotently(tmp_path: Path):
+    reset_db()
+    with SessionLocal() as db:
+        db.add(Setting(key="event_root", value=str(tmp_path / "events")))
+        db.commit()
+        snapshot = [{
+            "public_id": "cloud-event-12345678",
+            "name": "School Event",
+            "event_date": "2026-10-25",
+            "description": "Imported from cloud",
+            "gallery_settings": {"enable_gallery": True, "allow_download": True},
+            "photos": [{
+                "local_photo_id": "photo-1",
+                "filename": "one.jpg",
+                "storage_provider": "google_drive",
+                "storage_object_id": "drive-one",
+                "published": True,
+                "hidden": False,
+            }],
+        }]
+        assert import_cloud_events(db, snapshot) == {"created": 1, "updated": 0, "photos": 1}
+        assert import_cloud_events(db, snapshot) == {"created": 0, "updated": 1, "photos": 0}
+        event = db.query(Event).filter_by(public_id="cloud-event-12345678").one()
+        photo = db.query(Photo).filter_by(event_id=event.id).one()
+        assert event.status == "CLOUD"
+        assert photo.published is True
+        assert photo.storage_object_id == "drive-one"
 
 
 def test_process_photo_is_passthrough_without_auto_editing(tmp_path: Path):

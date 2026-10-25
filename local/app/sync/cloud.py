@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 from pathlib import Path
@@ -45,6 +46,8 @@ def event_payload(event: Event) -> dict[str, Any]:
         gallery_settings = json.loads(event.gallery_json or "{}")
     except json.JSONDecodeError:
         gallery_settings = {}
+    pin = str(gallery_settings.pop("optional_pin", "") or "").strip()
+    gallery_settings["pin_hash"] = hashlib.sha256(pin.encode("utf-8")).hexdigest() if pin else ""
     return {
         "public_id": event.public_id,
         "name": event.name,
@@ -130,3 +133,28 @@ def sync_photo(event: Event, photo: Photo, *, strict: bool = False) -> bool:
 
 def delete_cloud_event(public_id: str, *, strict: bool = False) -> bool:
     return delete(f"/api/sync/event/{public_id}", strict=strict)
+
+
+def list_cloud_events(*, strict: bool = False) -> list[dict[str, Any]]:
+    base = cloud_api_url()
+    if not base:
+        if strict:
+            raise CloudSyncError("Cloud API is not configured")
+        return []
+    try:
+        response = httpx.get(f"{base}/api/sync/events", headers=sync_headers(), timeout=20)
+        response.raise_for_status()
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("Cloud returned an invalid event list")
+        return payload
+    except Exception as exc:
+        log.warning("Could not load cloud events: %s", exc)
+        if strict:
+            raise CloudSyncError(f"Cloud event listing failed: {exc}") from exc
+        return []
+
+
+def fetch_cloud_events(*, strict: bool = False) -> list[dict[str, Any]]:
+    """Read cloud events with the private sync token (legacy alias)."""
+    return list_cloud_events(strict=strict)

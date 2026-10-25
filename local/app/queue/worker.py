@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 from datetime import datetime, timedelta
@@ -12,7 +13,7 @@ from sqlalchemy import and_, select
 from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
-from ..sync.cloud import enabled as cloud_sync_enabled, sync_event, sync_photo
+from ..sync.cloud import enabled as cloud_sync_enabled, list_cloud_events, sync_event, sync_photo
 from ..uploader.storage import GoogleAuthorizationExpired, env_provider
 
 log = logging.getLogger("photoflow")
@@ -46,11 +47,15 @@ class JobWorker:
         self.stop_event = threading.Event()
         self.threads: list[threading.Thread] = []
         self._claim_lock = threading.Lock()
+        self._cloud_poll_thread: threading.Thread | None = None
+        self._last_cloud_poll = 0.0
 
     def start(self) -> None:
         if self.threads:
             return
         self._recover_publish_jobs()
+        self._cloud_poll_thread = threading.Thread(target=self._poll_cloud_events, name="photoflow-cloud-events", daemon=True)
+        self._cloud_poll_thread.start()
         for idx in range(self.worker_count):
             thread = threading.Thread(target=self._run, name=f"photoflow-worker-{idx}", daemon=True)
             thread.start()
@@ -83,6 +88,26 @@ class JobWorker:
         self.stop_event.set()
         for thread in self.threads:
             thread.join(timeout=2)
+        if self._cloud_poll_thread:
+            self._cloud_poll_thread.join(timeout=2)
+
+    def _poll_cloud_events(self) -> None:
+        try:
+            interval = min(3600, max(30, int(os.getenv("CLOUD_EVENT_POLL_SECONDS", "60"))))
+        except ValueError:
+            interval = 60
+            log.warning("Invalid CLOUD_EVENT_POLL_SECONDS; using 60 seconds")
+        while not self.stop_event.is_set():
+            if cloud_sync_enabled():
+                try:
+                    from ..routers.events import import_cloud_events
+                    with SessionLocal() as db:
+                        result = import_cloud_events(db, list_cloud_events(strict=True))
+                    if result["created"] or result["updated"]:
+                        log.info("Cloud event poll: imported %s new event(s), updated %s", result["created"], result["updated"])
+                except Exception:
+                    log.exception("Cloud event poll failed; will retry")
+            self.stop_event.wait(interval)
 
     def _run(self) -> None:
         while not self.stop_event.is_set():

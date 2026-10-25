@@ -3,13 +3,16 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import time
 import tempfile
+import zipfile
 from pathlib import Path
-from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 import qrcode
 
@@ -17,6 +20,8 @@ from ..database import get_db
 from ..models import Event, GallerySettings, Photo, PhotoVariant
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
+PIN_COOKIE = "momentlink_gallery_access"
+PIN_TTL_SECONDS = 12 * 60 * 60
 
 
 def pin_ok(event: Event, pin: str = "") -> bool:
@@ -29,6 +34,45 @@ def pin_ok(event: Event, pin: str = "") -> bool:
 def require_gallery_access(event: Event, pin: str = "") -> None:
     if not pin_ok(event, pin):
         raise HTTPException(403, "Gallery PIN is required")
+
+
+def pin_cookie_value(public_id: str, pin_hash_value: str) -> str:
+    expires = str(int(time.time()) + PIN_TTL_SECONDS)
+    body = f"{public_id}:{expires}"
+    signature = hmac.new(pin_hash_value.encode(), body.encode(), hashlib.sha256).hexdigest()
+    return f"{expires}.{signature}"
+
+
+def cookie_pin_ok(event: Event, token: str) -> bool:
+    try:
+        expires, signature = token.split(".", 1)
+        if len(signature) != 64:
+            return False
+        if int(expires) < int(time.time()):
+            return False
+        body = f"{event.public_id}:{expires}"
+        expected = hmac.new(event.pin_hash.encode(), body.encode(), hashlib.sha256).hexdigest()
+        return hmac.compare_digest(signature, expected)
+    except (ValueError, TypeError):
+        return False
+
+
+def has_gallery_access(event: Event, request: Request, pin: str = "") -> bool:
+    if not event.pin_hash:
+        return True
+    return cookie_pin_ok(event, request.cookies.get(PIN_COOKIE, "")) or bool(pin and pin_ok(event, pin))
+
+
+def grant_pin_access(event: Event, request: Request, response: Response, pin: str) -> bool:
+    if not event.pin_hash:
+        return True
+    if cookie_pin_ok(event, request.cookies.get(PIN_COOKIE, "")):
+        return True
+    if not pin_ok(event, pin):
+        return False
+    is_https = request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https"
+    response.set_cookie(PIN_COOKIE, pin_cookie_value(event.public_id, event.pin_hash), max_age=PIN_TTL_SECONDS, httponly=True, secure=is_https, samesite="none" if is_https else "lax", path=f"/api/gallery/{event.public_id}")
+    return True
 
 
 def request_base_url(request: Request) -> str:
@@ -58,8 +102,7 @@ def drive_preview_url(file_id: str, size: int = 1600) -> str:
 
 
 def photo_download_url(request: Request, public_id: str, photo_id: str, pin: str = "") -> str:
-    url = f"{request_base_url(request)}/api/gallery/{public_id}/photos/{photo_id}/download"
-    return f"{url}?pin={quote(pin, safe='')}" if pin else url
+    return f"{request_base_url(request)}/api/gallery/{public_id}/photos/{photo_id}/download"
 
 
 def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str:
@@ -89,14 +132,15 @@ def variants_for_photo(db: Session, photo: Photo, download_url: str = "", rows: 
 
 
 @router.get("/{public_id}")
-def gallery(public_id: str, request: Request, pin: str = "", db: Session = Depends(get_db)):
+def gallery(public_id: str, request: Request, response: Response, pin: str = "", db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     settings = db.get(GallerySettings, event.id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
-    locked = not pin_ok(event, pin)
+    unlocked = grant_pin_access(event, request, response, pin)
+    locked = not unlocked
     count = 0 if locked else db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).count()
     return {
         "event": {"name": event.name, "event_date": event.event_date, "photo_count": count, "gallery_url": public_gallery_url(event.public_id, request)},
@@ -127,14 +171,15 @@ def gallery_qr(public_id: str, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, pin: str = "", db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, response: Response, page: int = 1, page_size: int = 60, pin: str = "", db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     settings = db.get(GallerySettings, event.id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
-    require_gallery_access(event, pin)
+    if not grant_pin_access(event, request, response, pin):
+        require_gallery_access(event)
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
@@ -159,7 +204,7 @@ def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60,
 
 
 @router.get("/{public_id}/photos/{photo_id}/download")
-async def download_photo(public_id: str, photo_id: str, pin: str = "", db: Session = Depends(get_db)):
+async def download_photo(public_id: str, photo_id: str, request: Request, response: Response, db: Session = Depends(get_db)):
     photo = (
         db.query(Photo)
         .join(Event, Event.id == Photo.event_id)
@@ -176,7 +221,8 @@ async def download_photo(public_id: str, photo_id: str, pin: str = "", db: Sessi
     event = db.get(Event, photo.event_id)
     if not event:
         raise HTTPException(404, "Gallery not found")
-    require_gallery_access(event, pin)
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
     settings = db.get(GallerySettings, photo.event_id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
@@ -223,15 +269,90 @@ async def download_photo(public_id: str, photo_id: str, pin: str = "", db: Sessi
     )
 
 
+@router.get("/{public_id}/downloads.zip")
+async def download_selected_photos(
+    public_id: str,
+    request: Request,
+    photo_id: list[str] = Query(...),
+    db: Session = Depends(get_db),
+):
+    selected_ids = list(dict.fromkeys(photo_id))
+    if not selected_ids or len(selected_ids) > 40:
+        raise HTTPException(400, "Select between 1 and 40 photos")
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Gallery not found")
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
+    settings = db.get(GallerySettings, event.id)
+    if settings and not settings.enabled:
+        raise HTTPException(404, "Gallery is closed")
+    if settings and not settings.allow_download:
+        raise HTTPException(403, "Downloads are disabled")
+
+    rows = db.query(Photo).filter(
+        Photo.event_id == event.id,
+        Photo.id.in_(selected_ids),
+        Photo.published == True,
+        Photo.hidden == False,
+    ).all()
+    photos_by_id = {photo.id: photo for photo in rows}
+    if len(photos_by_id) != len(selected_ids):
+        raise HTTPException(404, "One or more selected photos are unavailable")
+    variants = db.query(PhotoVariant).filter(
+        PhotoVariant.photo_id.in_(selected_ids),
+        PhotoVariant.photo_id.in_(db.query(Photo.id).filter(Photo.event_id == event.id)),
+        PhotoVariant.kind == "finished",
+    ).all()
+    variants_by_photo = {variant.photo_id: variant for variant in variants}
+    if any(
+        photo_id not in variants_by_photo
+        or variants_by_photo[photo_id].storage_provider != "google_drive"
+        or not variants_by_photo[photo_id].storage_object_id
+        for photo_id in selected_ids
+    ):
+        raise HTTPException(404, "One or more selected photos are not available for download")
+
+    temp = tempfile.NamedTemporaryFile(prefix="momentlink-", suffix=".zip", delete=False)
+    archive_path = temp.name
+    temp.close()
+    try:
+        async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
+            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
+                for index, selected_id in enumerate(selected_ids, start=1):
+                    photo = photos_by_id[selected_id]
+                    variant = variants_by_photo[selected_id]
+                    filename = Path(photo.filename).name or f"{photo.id}.jpg"
+                    archive_name = f"{index:02d}_{filename}"
+                    async with client.stream("GET", drive_download_url(variant.storage_object_id)) as upstream:
+                        if upstream.status_code >= 400:
+                            raise HTTPException(502, "Cannot download one or more selected photos from storage")
+                        with archive.open(archive_name, "w") as item:
+                            async for chunk in upstream.aiter_bytes(1024 * 1024):
+                                item.write(chunk)
+    except Exception:
+        if os.path.exists(archive_path):
+            os.unlink(archive_path)
+        raise
+
+    return FileResponse(
+        archive_path,
+        media_type="application/zip",
+        filename="momentlink-photos.zip",
+        background=BackgroundTask(os.unlink, archive_path),
+    )
+
+
 @router.get("/{public_id}/downloads")
-def download_links(public_id: str, request: Request, pin: str = "", db: Session = Depends(get_db)):
+def download_links(public_id: str, request: Request, db: Session = Depends(get_db)):
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
     settings = db.get(GallerySettings, event.id)
     if settings and not settings.enabled:
         raise HTTPException(404, "Gallery is closed")
-    require_gallery_access(event, pin)
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
     if settings and not settings.allow_download:
         raise HTTPException(403, "Downloads are disabled")
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()

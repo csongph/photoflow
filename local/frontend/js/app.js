@@ -48,7 +48,8 @@ const checkLabels = {
 
 function nav(active) {
   return `<aside class="nav">
-    <div class="brand"><span>MomentLink</span><small>V1 Local</small></div>
+    <a class="brand" href="/" aria-label="MomentLink Studio หน้าหลัก"><span class="brand-mark">M</span><span class="brand-copy"><b>MomentLink</b><small>STUDIO · LOCAL</small></span></a>
+    <p class="nav-caption">เมนูหลัก</p>
     <a class="${active === "dashboard" ? "active" : ""}" href="/">แดชบอร์ด</a>
     <a class="${active === "setup" ? "active" : ""}" href="/setup">เตรียมความพร้อม</a>
     <a class="${active === "events" ? "active" : ""}" href="/events">งานถ่ายภาพ</a>
@@ -56,7 +57,8 @@ function nav(active) {
     <a class="${active === "archive" ? "active" : ""}" href="/archive">คลังงาน</a>
     <a class="${active === "diagnostics" ? "active" : ""}" href="/diagnostics">ตรวจระบบ</a>
     <a class="${active === "settings" ? "active" : ""}" href="/settings">ตั้งค่า</a>
-    <a href="#" onclick="logoutAdmin(event)">ออกจากระบบ</a>
+    <div class="nav-spacer"></div>
+    <a class="nav-logout" href="#" onclick="logoutAdmin(event)">ออกจากระบบ</a>
   </aside>`;
 }
 
@@ -71,18 +73,18 @@ function layout(active, content) {
 }
 
 async function loadDashboard() {
-  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">Live Capture Console</p><h1>MomentLink Studio</h1><p class="hero-note">ควบคุมงานถ่ายภาพ ดูคิวจริง และเปิดแกลเลอรีให้ผู้ใช้จากจุดเดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรช</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
+  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">ศูนย์ควบคุมงานถ่ายภาพ</p><h1>MomentLink Studio</h1><p class="hero-note">ติดตามงานถ่าย จัดการคิว และเปิดแกลเลอรีให้แขกได้จากที่เดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรชข้อมูล</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
   <div class="grid">
-    <section class="panel span-8 main-card"><h2>งานที่กำลังทำ</h2><div id="active"></div></section>
-    <section class="panel span-4"><h2>สถานะระบบ</h2><div id="health"></div></section>
-    <section class="panel span-12"><h2>ตรวจความพร้อมก่อนเริ่มงาน</h2><div id="preflight"></div></section>
-    <section class="panel span-7"><h2>รูปภาพล่าสุด</h2><div class="thumbs" id="thumbs"></div></section>
-    <section class="panel span-5"><h2>คิวการทำงาน</h2><div id="queues"></div></section>
+    <section class="panel span-8 main-card"><div class="section-heading"><div><p class="section-eyebrow">กำลังดำเนินการ</p><h2>งานที่กำลังทำ</h2></div></div><div id="active"></div></section>
+    <section class="panel span-4"><div class="section-heading"><div><p class="section-eyebrow">ภาพรวม</p><h2>สถานะระบบ</h2></div></div><div id="health"></div></section>
+    <section class="panel span-12"><div class="section-heading"><div><p class="section-eyebrow">เช็กก่อนเริ่ม</p><h2>ความพร้อมของงาน</h2></div></div><div id="preflight"></div></section>
+    <section class="panel span-7"><div class="section-heading"><div><p class="section-eyebrow">อัปเดตล่าสุด</p><h2>รูปภาพล่าสุด</h2></div></div><div class="thumbs" id="thumbs"></div></section>
+    <section class="panel span-5"><div class="section-heading"><div><p class="section-eyebrow">งานเบื้องหลัง</p><h2>คิวการทำงาน</h2></div></div><div id="queues"></div></section>
   </div>`);
   const data = await api("/api/dashboard");
   if (!data.active_event) {
-    $("#live").textContent = "No active event";
-    $("#active").innerHTML = `<p class="muted">Create an event to begin.</p><a class="button" href="/events">Create Event</a>`;
+    $("#live").textContent = "ยังไม่มีงานที่เริ่มอยู่";
+    $("#active").innerHTML = `<div class="empty-state dashboard-empty"><span class="empty-icon">＋</span><b>พร้อมเริ่มงานถ่ายภาพใหม่</b><span>สร้างงานเพื่อกำหนดแกลเลอรีและโฟลเดอร์รับรูป</span><a class="button" href="/events">สร้างงานถ่ายภาพ</a></div>`;
     return;
   }
   $("#live").textContent = data.active_event.status;
@@ -156,7 +158,8 @@ async function loadEvents() {
     <label><span>Event Name</span><input name="name" required placeholder="Freshy 2026"></label>
     <label><span>Description</span><textarea name="description"></textarea></label>
     <label><span>Date</span><input name="event_date" type="date"></label>
-    <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>ระบบไม่แต่งรูปอัตโนมัติ</b><br><span>รูปจะถูกสำรองเป็น ORIGINAL แล้ว export เป็น FINISHED/PREVIEW/THUMBNAIL สำหรับ Gallery และ Google Drive โดยไม่ปรับสีหรือแสง</span></div>
+    <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
+    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>กรอบรูปสำหรับงานนี้</h2><p class="muted">อัปโหลด PNG พื้นหลังโปร่งใส ระบบจะวางกรอบทับรูปที่ประมวลผล และเก็บ ORIGINAL ไว้เหมือนเดิม ใช้กรอบที่มีสัดส่วนและแนวภาพตรงกับรูปถ่ายเพื่อไม่ให้ขอบถูกตัด</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG (พื้นหลังโปร่งใส ไม่เกิน 20 MB)</span><input id="photoboothFrameInput" name="photobooth_frame" type="file" accept="image/png,.png"></label><img id="photoboothFramePreview" class="frame-preview" alt="ตัวอย่างกรอบโฟโต้บูท" hidden><div id="frameUploadResult"></div></section>
     <h2>Gallery</h2><div class="checks">${["enable_gallery","allow_download"].map(k => `<label class="check"><input type="checkbox" name="${k}" checked>${k.replaceAll("_"," ")}</label>`).join("")}<label class="check"><input type="checkbox" name="instant_publish" checked disabled>auto publish</label></div>
     <label><span>Optional PIN</span><input name="optional_pin"></label>
     <label><span>Gallery Credit</span><input name="credit_text" value="ถ่ายภาพโดยทีมโสตโรงเรียน"></label>
@@ -165,7 +168,47 @@ async function loadEvents() {
     <button>Create Event</button>
   </form><section class="panel span-5"><div class="preview-head"><div><h2>Events</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">Scan Local Folders</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
   $("#eventForm").addEventListener("submit", createEvent);
+  $("#photoboothFrameInput").addEventListener("change", previewPhotoboothFrame);
   renderEvents();
+}
+
+function previewPhotoboothFrame(ev) {
+  const file = ev.target.files?.[0];
+  const preview = $("#photoboothFramePreview");
+  if (window.__photoboothFramePreviewUrl) URL.revokeObjectURL(window.__photoboothFramePreviewUrl);
+  if (!file) {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    return;
+  }
+  if (file.type !== "image/png" || !file.name.toLowerCase().endsWith(".png")) {
+    ev.target.value = "";
+    preview.hidden = true;
+    alert("กรุณาเลือกกรอบรูปไฟล์ PNG");
+    return;
+  }
+  window.__photoboothFramePreviewUrl = URL.createObjectURL(file);
+  preview.src = window.__photoboothFramePreviewUrl;
+  preview.hidden = false;
+}
+
+async function uploadPhotoboothFrame(eventId, file) {
+  const data = new FormData();
+  data.append("frame", file, file.name);
+  return api(`/api/events/${eventId}/photobooth-frame`, { method: "POST", body: data, headers: {} });
+}
+
+async function retryPhotoboothFrame(eventId) {
+  const file = $("#photoboothFrameInput")?.files?.[0];
+  if (!file) return alert("เลือกไฟล์กรอบ PNG ก่อนลองอีกครั้ง");
+  const status = $("#frameUploadResult");
+  status.textContent = "กำลังอัปโหลดกรอบ...";
+  try {
+    const result = await uploadPhotoboothFrame(eventId, file);
+    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบสำเร็จ ${result.width} × ${result.height} px รูปใหม่จะใช้กรอบนี้</div>`;
+  } catch (err) {
+    status.innerHTML = `<div class="frame-upload-error">อัปโหลดไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(eventId)})'>ลองอีกครั้ง</button></div>`;
+  }
 }
 
 async function renderEvents() {
@@ -200,13 +243,28 @@ async function createEvent(ev) {
   ev.preventDefault();
   const f = new FormData(ev.target);
   const checked = (k) => f.get(k) === "on";
+  const frameFile = f.get("photobooth_frame");
+  const frameEnabled = checked("photobooth_frame_enabled");
+  if (frameEnabled && (!(frameFile instanceof File) || !frameFile.size)) {
+    alert("เลือกไฟล์กรอบ PNG ก่อนสร้างงาน หรือเอาเครื่องหมายใช้กรอบออก");
+    return;
+  }
   const payload = {
     name: f.get("name"), description: f.get("description"), event_date: f.get("event_date"),
     gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "ถ่ายภาพโดยทีมโสตโรงเรียน", report_contact: f.get("report_contact") || "" }),
     drive: { upload_finished_photos: checked("upload_finished_photos"), upload_originals: checked("upload_originals") }
   };
   const event = await api("/api/events", { method: "POST", body: JSON.stringify(payload) });
-  $("#created").innerHTML = `<hr><h2>INCOMING Folder</h2><div class="pathbox">${event.incoming_path}</div><div class="row" style="margin-top:14px"><button onclick="navigator.clipboard.writeText('${event.incoming_path.replaceAll("\\", "\\\\")}')">Copy Path</button><button onclick="startEvent('${event.id}')">Start Event</button></div>`;
+  let frameStatus = "";
+  if (frameEnabled) {
+    try {
+      const result = await uploadPhotoboothFrame(event.id, frameFile);
+      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบสำเร็จ ${result.width} × ${result.height} px รูปใหม่จะใช้กรอบนี้</div>`;
+    } catch (err) {
+      frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
+    }
+  }
+  $("#created").innerHTML = `${frameStatus}<hr><h2>INCOMING Folder</h2><div class="pathbox">${html(event.incoming_path)}</div><div class="row" style="margin-top:14px"><button onclick='navigator.clipboard.writeText(${jsArg(event.incoming_path)})'>Copy Path</button><button onclick='startEvent(${jsArg(event.id)})'>Start Event</button></div>`;
   renderEvents();
 }
 async function startEvent(id) {

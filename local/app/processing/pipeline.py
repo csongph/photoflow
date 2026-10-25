@@ -1,4 +1,5 @@
 from __future__ import annotations
+import json
 from pathlib import Path
 
 from PIL import Image, ImageOps
@@ -42,10 +43,28 @@ def save_jpeg_atomic(img: Image.Image, path: Path, quality: int) -> None:
     tmp.replace(path)
 
 
+def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
+    try:
+        gallery = json.loads(event.gallery_json or "{}")
+    except json.JSONDecodeError:
+        gallery = {}
+    if not gallery.get("photobooth_frame_enabled"):
+        return img
+
+    frame_path = Path(event.root_path) / "CACHE" / "photobooth-frame.png"
+    if not frame_path.is_file():
+        raise RuntimeError("Photobooth frame is enabled but its PNG file is missing")
+    with Image.open(frame_path) as source:
+        frame = source.convert("RGBA")
+    frame = ImageOps.fit(frame, img.size, method=Image.Resampling.LANCZOS)
+    return Image.alpha_composite(img.convert("RGBA"), frame).convert("RGB")
+
+
 def process_photo(db, event: Event, photo: Photo) -> None:
     source = Path(photo.original_path)
     img = open_source_image(source)
     img = ImageOps.exif_transpose(img)
+    img = apply_photobooth_frame(img, event)
 
     event_root = Path(event.root_path)
     base = Path(photo.filename).stem
