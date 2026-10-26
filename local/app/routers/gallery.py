@@ -139,7 +139,10 @@ def require_gallery_access(event: Event, pin: str = "") -> None:
 
 
 @router.get("/{public_id}")
-def gallery(public_id: str, request: Request, db: Session = Depends(get_db)):
+def gallery(public_id: str, request: Request, db: Session = Depends(get_db), response: Response = None):
+    if response:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     event = event_by_public_id(db, public_id)
     settings = gallery_settings(event)
     locked = not has_gallery_access(event, request)
@@ -173,7 +176,10 @@ def gallery_qr(public_id: str, db: Session = Depends(get_db)):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db), response: Response = None):
+    if response:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     event = event_by_public_id(db, public_id)
     if not has_gallery_access(event, request):
         require_gallery_access(event)

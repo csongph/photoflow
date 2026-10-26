@@ -181,7 +181,10 @@ def variants_for_photo(db: Session, photo: Photo, download_url: str = "", rows: 
 
 
 @router.get("/{public_id}")
-def gallery(public_id: str, request: Request, db: Session = Depends(get_db)):
+def gallery(public_id: str, request: Request, db: Session = Depends(get_db), response: Response = None):
+    if response:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
@@ -219,7 +222,10 @@ def gallery_qr(public_id: str, request: Request, db: Session = Depends(get_db)):
 
 
 @router.get("/{public_id}/photos")
-def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db)):
+def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60, db: Session = Depends(get_db), response: Response = None):
+    if response:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")

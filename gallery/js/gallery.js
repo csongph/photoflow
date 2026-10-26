@@ -12,6 +12,10 @@ const publicId = params.get("event") || (pathPublicId === "gallery" || pathPubli
 let knownPhotoCount = 0;
 let loadingPhotos = false;
 let galleryRefreshTimer = null;
+let galleryRetryTimer = null;
+let galleryInitializing = false;
+let galleryInitialized = false;
+let galleryRetryDelay = 3000;
 let galleryUrl = location.href.split("#")[0];
 let galleryMeta = {
   eventName: "CS.BXXM Gallery",
@@ -74,6 +78,7 @@ async function fetchDownload(url, filename) {
 // -------------------------------------------------------------------------
 
 async function initGallery() {
+  if (galleryInitializing) return;
   if (!publicId) {
     const controls = document.querySelector(".gallery-controls");
     const shareCard = document.querySelector(".qr-share-card");
@@ -90,6 +95,8 @@ async function initGallery() {
     return;
   }
 
+  galleryInitializing = true;
+  clearTimeout(galleryRetryTimer);
   try {
     setupScreenQr();
     const meta = await getJson(`${API}/api/gallery/${publicId}`);
@@ -101,6 +108,8 @@ async function initGallery() {
     if (eventTitleEl) eventTitleEl.textContent = eventName;
     
     galleryUrl = meta.event?.gallery_url || galleryUrl;
+    galleryInitialized = true;
+    galleryRetryDelay = 3000;
     const brandHome = document.querySelector("#brandHome");
     if (brandHome) brandHome.href = galleryUrl;
 
@@ -135,7 +144,7 @@ async function initGallery() {
     if (!s.locked) {
       galleryRefreshTimer = setInterval(() => {
         if (!document.hidden) loadPhotos(false);
-      }, 8000);
+      }, 3000);
     }
   } catch (err) {
     console.error(err);
@@ -143,8 +152,15 @@ async function initGallery() {
       <div class="empty-gallery">
         <span class="empty-icon">⚠️</span>
         <h4>ไม่สามารถเปิด Gallery ได้</h4>
-        <p>กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต หรือลองรีเฟรชหน้านี้ใหม่อีกครั้ง</p>
+        <p>กำลังลองเชื่อมต่อใหม่อัตโนมัติ…</p>
       </div>`;
+    galleryRetryTimer = setTimeout(() => {
+      galleryRetryTimer = null;
+      initGallery();
+    }, galleryRetryDelay);
+    galleryRetryDelay = Math.min(galleryRetryDelay * 2, 30000);
+  } finally {
+    galleryInitializing = false;
   }
 }
 
@@ -616,7 +632,10 @@ async function unlockGallery(ev) {
 // -------------------------------------------------------------------------
 
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && publicId) loadPhotos(false);
+  if (!document.hidden && publicId) {
+    if (galleryInitialized) loadPhotos(false);
+    else initGallery();
+  }
 });
 
 document.addEventListener("keydown", ev => {
