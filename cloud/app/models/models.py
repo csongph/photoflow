@@ -63,6 +63,9 @@ class GallerySettings(Base):
     auto_refresh: Mapped[bool] = mapped_column(Boolean, default=True)
     credit_text: Mapped[str] = mapped_column(String(220), default="")
     report_contact: Mapped[str] = mapped_column(String(220), default="")
+    sponsor_name: Mapped[str] = mapped_column(String(180), default="")
+    sponsor_logo: Mapped[str] = mapped_column(String(2048), default="")
+    sponsor_hashtag: Mapped[str] = mapped_column(String(120), default="")
 
 
 class SyncJob(Base):
