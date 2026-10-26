@@ -87,6 +87,12 @@ async function fetchDownload(url, filename) {
 
 async function initGallery() {
   if (!publicId) {
+    const controls = document.querySelector(".gallery-controls");
+    const shareCard = document.querySelector(".qr-share-card");
+    const statusBar = document.querySelector(".bar-status");
+    if (controls) controls.style.display = "none";
+    if (shareCard) shareCard.style.display = "none";
+    if (statusBar) statusBar.style.display = "none";
     document.querySelector("#grid").innerHTML = `
       <div class="empty-gallery">
         <span class="empty-icon">📷</span>
@@ -107,6 +113,8 @@ async function initGallery() {
     if (eventTitleEl) eventTitleEl.textContent = eventName;
     
     galleryUrl = meta.event?.gallery_url || galleryUrl;
+    const brandHome = document.querySelector("#brandHome");
+    if (brandHome) brandHome.href = galleryUrl;
 
     // Settings & Sponsors
     const s = meta.settings || {};
