@@ -33,13 +33,13 @@ async def lifespan(app: FastAPI):
         for event in db.query(Event).filter(Event.status == "LIVE").all():
             watcher_manager.start_event(event)
     worker.start()
-    log.info("MomentLink local started")
+    log.info("CS.BXXM STUDIO local started")
     yield
     watcher_manager.stop_all()
     worker.stop()
 
 
-app = FastAPI(title="MomentLink Local", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="CS.BXXM STUDIO Local", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://127.0.0.1:8000", "http://localhost:8000"],

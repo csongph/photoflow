@@ -8,8 +8,8 @@ function showToast(message, tone = "info") {
   }
   toast.className = `app-toast ${tone}`;
   toast.textContent = message;
-  clearTimeout(window.__momentlinkToastTimer);
-  window.__momentlinkToastTimer = setTimeout(() => toast.remove(), 4200);
+  clearTimeout(window.__csbxxmToastTimer);
+  window.__csbxxmToastTimer = setTimeout(() => toast.remove(), 4200);
 }
 window.addEventListener("unhandledrejection", event => {
   console.error(event.reason);
@@ -48,7 +48,18 @@ const checkLabels = {
 
 function nav(active) {
   return `<aside class="nav">
-    <a class="brand" href="/" aria-label="MomentLink Studio หน้าหลัก"><span class="brand-mark">M</span><span class="brand-copy"><b>MomentLink</b><small>STUDIO · LOCAL</small></span></a>
+    <a class="brand" href="/" aria-label="CS.BXXM STUDIO หน้าหลัก">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" class="brand-svg">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+          <circle cx="12" cy="13" r="4"></circle>
+        </svg>
+      </span>
+      <span class="brand-copy">
+        <span class="brand-name">CS.BXXM <span class="brand-tag">BOOTH</span></span>
+        <small class="brand-sub">STUDIO CONTROL</small>
+      </span>
+    </a>
     <p class="nav-caption">เมนูหลัก</p>
     <a class="${active === "dashboard" ? "active" : ""}" href="/">แดชบอร์ด</a>
     <a class="${active === "setup" ? "active" : ""}" href="/setup">เตรียมความพร้อม</a>
@@ -73,7 +84,7 @@ function layout(active, content) {
 }
 
 async function loadDashboard() {
-  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">ศูนย์ควบคุมงานถ่ายภาพ</p><h1>MomentLink Studio</h1><p class="hero-note">ติดตามงานถ่าย จัดการคิว และเปิดแกลเลอรีให้แขกได้จากที่เดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรชข้อมูล</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
+  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO · ศูนย์ควบคุมงานถ่ายภาพ</p><h1>Photo Booth Master</h1><p class="hero-note">ติดตามงานถ่าย จัดการคิว และเปิดแกลเลอรีให้แขกได้จากที่เดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรชข้อมูล</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
   <div class="grid">
     <section class="panel span-8 main-card"><div class="section-heading"><div><p class="section-eyebrow">กำลังดำเนินการ</p><h2>งานที่กำลังทำ</h2></div></div><div id="active"></div></section>
     <section class="panel span-4"><div class="section-heading"><div><p class="section-eyebrow">ภาพรวม</p><h2>สถานะระบบ</h2></div></div><div id="health"></div></section>
@@ -98,7 +109,8 @@ async function loadDashboard() {
     <div class="row" style="margin-top:14px">
       <button onclick='navigator.clipboard.writeText(${jsArg(data.active_event.incoming_path)})'>Copy Path</button>
       <button class="secondary" onclick='openFolder(${jsArg(data.active_event.id)})'>Open Folder</button>
-      <button class="secondary" onclick='showQr(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.gallery_url)})'>Show QR</button>
+      <button class="secondary" onclick='showQr(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Show QR</button>
+      <button class="secondary" onclick='openKioskModal(${jsArg(data.active_event.name)}, "/api/events/" + ${jsArg(data.active_event.id)} + "/qr.png")'>📺 Kiosk Screen</button>
       <button class="secondary" onclick='shareGallery(${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Share Gallery</button>
       <button class="secondary" onclick='rebuildPhotos(${jsArg(data.active_event.id)})'>Rebuild Gallery Files</button>
       <button class="warn" onclick='pause(${jsArg(data.active_event.id)})'>${data.active_event.publishing_paused ? "Resume Publishing" : "Pause Publishing"}</button>
@@ -112,8 +124,31 @@ async function loadDashboard() {
   loadFailedJobs(data.active_event.id);
 }
 
-async function showQr(id, url) {
-  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', 'MomentLink Gallery')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
+function openKioskModal(name, qrSrc) {
+  let modal = document.querySelector("#kioskModal");
+  if (!modal) {
+    modal = document.createElement("div");
+    modal.id = "kioskModal";
+    modal.className = "kiosk-modal";
+    document.body.appendChild(modal);
+  }
+  modal.innerHTML = `
+    <div class="kiosk-modal-backdrop" onclick="this.parentElement.remove()"></div>
+    <div class="kiosk-modal-content">
+      <button class="kiosk-close" onclick="this.closest('.kiosk-modal').remove()">✕ ปิดจอ</button>
+      <div class="kiosk-badge">CS.BXXM STUDIO</div>
+      <h2>สแกนเพื่อรับรูปของคุณ</h2>
+      <p class="kiosk-sub">${html(name || "Photo Booth Live Gallery")}</p>
+      <div class="kiosk-qr-wrap">
+        <img src="${qrSrc}" alt="Kiosk QR Code">
+      </div>
+      <p class="kiosk-hint">เปิดกล้องมือถือแล้วสแกนได้ทันที รูปจะอัปเดตอัตโนมัติ</p>
+    </div>
+  `;
+}
+
+async function showQr(id, url, name = "") {
+  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><button class="button secondary" onclick='openKioskModal(${jsArg(name || "CS.BXXM Studio")}, "/api/events/${id}/qr.png")'>📺 ขยายจอใหญ่ (Kiosk)</button><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', '${name || "CS.BXXM Gallery"}')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
 }
 async function loadPreflight(id) {
   const data = await api(`/api/events/${id}/preflight`);
@@ -123,7 +158,7 @@ async function loadPreflight(id) {
 async function shareGallery(url, name) {
   const text = `รูปภาพงาน ${name}\nเปิด Gallery และดาวน์โหลดรูปได้ที่:\n${url}`;
   await navigator.clipboard.writeText(text);
-  alert("คัดลอกข้อความสำหรับส่ง LINE/กลุ่มโรงเรียนแล้ว");
+  alert("คัดลอกข้อความสำหรับส่งต่อแล้ว");
 }
 async function rebuildPhotos(id) {
   if (!confirm("สร้างไฟล์ Gallery ใหม่จาก ORIGINAL ทั้งหมด?")) return;
@@ -345,7 +380,7 @@ async function loadSettings() {
 
     <section class="panel settings-card span-5">
       <div class="settings-card-head"><div><p class="kicker">Downloads</p><h2>Google Drive</h2><p class="muted">ใช้เก็บไฟล์ finished สำหรับให้ผู้ใช้ดาวน์โหลดจริง</p></div><span class="status pill">${google.connected ? "CONNECTED" : "NOT CONNECTED"}</span></div>
-      <label><span>Drive Root Folder</span><input name="drive_root" value="${html(google.root_folder || "MomentLink Events")}"></label>
+      <label><span>Drive Root Folder</span><input name="drive_root" value="${html(google.root_folder || "CS.BXXM Events")}"></label>
       <div class="settings-list">
         <div><span>OAuth Config</span><b>${google.configured ? "READY" : "MISSING"}</b></div>
         <div><span>Ready Uploads</span><b>${google.ready_to_upload}</b></div>
@@ -354,7 +389,7 @@ async function loadSettings() {
       <p class="muted">Redirect URI: ${html(google.redirect_uri || "not set")}</p>
       ${google.needs_reconnect ? `<p class="settings-hint badtext">สิทธิ์ Google Drive หมดอายุหรือยังไม่ได้เชื่อมต่อ กรุณากด Connect แล้วกด Retry Uploads เพื่อส่งรูปที่ค้าง</p>` : ""}
       <div class="row"><a class="button" href="/api/google/connect">Connect</a><button type="button" class="secondary" onclick="retryGoogleUploads()">Retry Uploads</button><button type="button" class="bad" onclick="disconnectGoogle()">Disconnect</button></div>
-      ${google.configured ? "" : `<p class="settings-hint badtext">ใส่ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET และ GOOGLE_REDIRECT_URI ใน .env แล้ว restart MomentLink ก่อนเชื่อมต่อ</p>`}
+      ${google.configured ? "" : `<p class="settings-hint badtext">ใส่ GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET และ GOOGLE_REDIRECT_URI ใน .env แล้ว restart CS.BXXM Studio ก่อนเชื่อมต่อ</p>`}
     </section>
 
     <section class="panel settings-card span-7">
@@ -437,7 +472,7 @@ async function loadLocalFolders(path = "") {
 }
 
 async function createLocalFolder(parent) {
-  const name = prompt("ตั้งชื่อโฟลเดอร์ใหม่", "MomentLink Events");
+  const name = prompt("ตั้งชื่อโฟลเดอร์ใหม่", "CS.BXXM Events");
   if (!name) return;
   try {
     const result = await api("/api/settings/local-folders", { method: "POST", body: JSON.stringify({ parent, name }) });
@@ -462,13 +497,13 @@ async function verifyEventRoot() {
 }
 
 async function disconnectGoogle() {
-  if (!confirm("Disconnect Google Drive from this local MomentLink?")) return;
+  if (!confirm("Disconnect Google Drive from this local CS.BXXM Studio?")) return;
   await api("/api/google/disconnect", { method: "POST" });
   loadSettings();
 }
 
 function loadGalleryPreview() {
-  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>Gallery Control</h1><p class="hero-note">รูปจะเผยแพร่อัตโนมัติหลังประมวลผลและอัปโหลด Google Drive สำเร็จ คุณยังซ่อน แสดง หรือสร้างไฟล์ใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">Open Guest Gallery</a><button class="secondary" onclick="loadGalleryPreview()">Refresh</button></div></div><section class="panel"><div class="preview-head"><div><h2>Guest Page Settings</h2><p class="muted">ข้อความเครดิตและช่องทางแจ้งปัญหาจะแสดงในฝั่งผู้ใช้</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>Gallery Credit</span><input name="credit_text"></label><label><span>Report Contact</span><input name="report_contact" placeholder="LINE @school-av หรืออีเมลทีมงาน"></label><button type="submit">Save Guest Text</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>Photo Status</h2><p class="muted">ไม่ต้องกด Publish รูปใหม่ ระบบจะนำขึ้น Gallery ให้เองเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
+  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>Gallery Control</h1><p class="hero-note">รูปจะเผยแพร่อัตโนมัติหลังประมวลผลและอัปโหลด Google Drive สำเร็จ คุณยังซ่อน แสดง หรือสร้างไฟล์ใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">Open Guest Gallery</a><button class="secondary" onclick="loadGalleryPreview()">Refresh</button></div></div><section class="panel"><div class="preview-head"><div><h2>Guest Page Settings</h2><p class="muted">ข้อความเครดิต ช่องทางติดต่อ และโลโก้ผู้สนับสนุนจะแสดงในฝั่งผู้ใช้</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>Gallery Credit</span><input name="credit_text" placeholder="Photo Booth Experience by CS.BXXM STUDIO"></label><label><span>Report Contact</span><input name="report_contact" placeholder="LINE @cs.bxxm หรือเบอร์โทรติดต่อ"></label><div class="form-section-divider"><span>🤝 Sponsor / Co-Brand</span></div><label><span>Sponsor Name</span><input name="sponsor_name" placeholder="เช่น Central World, True Move H"></label><label><span>Sponsor Logo URL</span><input name="sponsor_logo" placeholder="https://... (URL รูป logo สปอนเซอร์)"></label><label><span>Event Hashtag</span><input name="sponsor_hashtag" placeholder="เช่น #CentralWorldParty2026"></label><button type="submit">Save Settings</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>Photo Status</h2><p class="muted">ไม่ต้องกด Publish รูปใหม่ ระบบจะนำขึ้น Gallery ให้เองเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
   api("/api/dashboard").then(d => {
     if (!d.active_event) {
       $("#publishAllBtn").disabled = true;
@@ -486,12 +521,21 @@ function loadGalleryPreview() {
 async function loadGuestSettings(eventId) {
   const settings = await api(`/api/events/${eventId}/gallery-settings`);
   const form = $("#guestSettingsForm");
-  form.credit_text.value = settings.credit_text || "";
-  form.report_contact.value = settings.report_contact || "";
+  for (const field of ["credit_text", "report_contact", "sponsor_name", "sponsor_logo", "sponsor_hashtag"]) {
+    form.elements[field].value = settings[field] || "";
+  }
   form.onsubmit = async (ev) => {
     ev.preventDefault();
-    await api(`/api/events/${eventId}/gallery-settings`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
-    alert("บันทึกข้อความฝั่งผู้ใช้แล้ว");
+    const submit = form.querySelector('[type="submit"]');
+    submit.disabled = true;
+    try {
+      await api(`/api/events/${eventId}/gallery-settings`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+      alert("บันทึกข้อความและข้อมูลสปอนเซอร์แล้ว");
+    } catch (err) {
+      alert(`บันทึกไม่สำเร็จ\n\n${err.message}`);
+    } finally {
+      submit.disabled = false;
+    }
   };
 }
 
@@ -556,13 +600,13 @@ async function rebuildOnePhoto(eventId, photoId) {
 }
 
 async function loadArchive() {
-  layout("archive", `<div class="top hero-panel"><div><p class="kicker">School Archive</p><h1>Event Archive</h1><p class="hero-note">รวมประวัติงานถ่ายทั้งหมด ค้นงานเก่า เปิด Gallery และคัดลอกลิงก์ส่งต่อได้</p></div></div><section class="panel"><div class="preview-head"><div><h2>All Events</h2><p class="muted">แสดงงานทั้งหมดจากฐานข้อมูลในเครื่อง</p></div><button class="secondary" onclick="loadArchive()">Refresh</button></div><div id="archiveList"></div></section>`);
+  layout("archive", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>Event Archive</h1><p class="hero-note">รวมประวัติงานถ่ายทั้งหมด ค้นงานเก่า เปิด Gallery และคัดลอกลิงก์ส่งต่อได้</p></div></div><section class="panel"><div class="preview-head"><div><h2>All Events</h2><p class="muted">แสดงงานทั้งหมดจากฐานข้อมูลในเครื่อง</p></div><button class="secondary" onclick="loadArchive()">Refresh</button></div><div id="archiveList"></div></section>`);
   const events = await api("/api/events");
   $("#archiveList").innerHTML = events.map(e => `<div class="queue-line"><span><b>${e.name}</b><br><small class="muted">${e.status} · ${e.root_path}</small></span><span class="row"><a class="button secondary" href="${e.gallery_url}" target="_blank">Gallery</a><button class="secondary" onclick='shareGallery(${jsArg(e.gallery_url)}, ${jsArg(e.name)})'>Share</button><button onclick='startEvent(${jsArg(e.id)})'>Start</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "archive")'>Delete</button></span></div>`).join("") || `<p class="muted">ยังไม่มีงานใน Archive</p>`;
 }
 
 async function loadDiagnostics() {
-  layout("diagnostics", `<div class="top hero-panel"><div><p class="kicker">Readiness</p><h1>Diagnostics</h1></div><button onclick="runSystemTest()">Run System Test</button></div><div class="grid"><section class="panel span-8"><h2>System Checks</h2><div id="checks"></div></section><section class="panel span-4"><h2>Queues</h2><div id="diagQueues"></div></section><section class="panel span-4"><h2>Real Database</h2><div id="diagDb"></div></section></div>`);
+  layout("diagnostics", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>System Diagnostics</h1></div><button onclick="runSystemTest()">Run System Test</button></div><div class="grid"><section class="panel span-8"><h2>System Checks</h2><div id="checks"></div></section><section class="panel span-4"><h2>Queues</h2><div id="diagQueues"></div></section><section class="panel span-4"><h2>Real Database</h2><div id="diagDb"></div></section></div>`);
   const data = await api("/api/diagnostics");
   renderDiagnostics(data);
 }

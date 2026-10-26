@@ -102,15 +102,15 @@ def event_root_options(db: Session = Depends(get_db)):
     home = Path.home()
     options = [
         folder_option("Current setting", event_root_path(db), True),
-        folder_option("Documents / MomentLink Events", home / "Documents" / "MomentLink Events", True),
-        folder_option("Pictures / MomentLink Events", home / "Pictures" / "MomentLink Events"),
-        folder_option("Desktop / MomentLink Events", home / "Desktop" / "MomentLink Events"),
+        folder_option("Documents / CS.BXXM Events", home / "Documents" / "CS.BXXM Events", True),
+        folder_option("Pictures / CS.BXXM Events", home / "Pictures" / "CS.BXXM Events"),
+        folder_option("Desktop / CS.BXXM Events", home / "Desktop" / "CS.BXXM Events"),
         folder_option("Project local events", settings.event_root),
     ]
     for drive in ["D:\\", "E:\\"]:
         root = Path(drive)
         if root.exists() and folder_writable(root):
-            options.append(folder_option(f"{drive}MomentLink Events", root / "MomentLink Events"))
+            options.append(folder_option(f"{drive}CS.BXXM Events", root / "CS.BXXM Events"))
     seen: set[str] = set()
     unique = []
     for option in options:
@@ -218,7 +218,7 @@ def choose_event_root(db: Session = Depends(get_db)):
         script = (
             "Add-Type -AssemblyName System.Windows.Forms; "
             "$dialog = New-Object System.Windows.Forms.FolderBrowserDialog; "
-            "$dialog.Description = 'เลือกโฟลเดอร์เก็บงาน MomentLink'; "
+            "$dialog.Description = 'เลือกโฟลเดอร์เก็บงาน CS.BXXM STUDIO'; "
             "$dialog.ShowNewFolderButton = $true; "
             "if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) { "
             "  [Console]::Out.Write($dialog.SelectedPath) "
@@ -244,7 +244,7 @@ def choose_event_root(db: Session = Depends(get_db)):
             root = tk.Tk()
             root.withdraw()
             root.attributes("-topmost", True)
-            selected = filedialog.askdirectory(title="เลือกโฟลเดอร์เก็บงาน MomentLink")
+            selected = filedialog.askdirectory(title="เลือกโฟลเดอร์เก็บงาน CS.BXXM STUDIO")
             root.destroy()
         except Exception as exc:
             raise HTTPException(500, f"Could not open folder picker: {exc}")

@@ -477,8 +477,13 @@ def get_gallery_settings(event_id: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Event not found")
     settings = gallery_settings(event)
     return {
-        "credit_text": settings.get("credit_text") or "ถ่ายภาพโดยทีมโสตโรงเรียน",
+        "credit_text": settings.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO",
         "report_contact": settings.get("report_contact") or "",
+        "sponsor_name": settings.get("sponsor_name") or "",
+        "sponsor_logo": settings.get("sponsor_logo") or "",
+        "sponsor_hashtag": settings.get("sponsor_hashtag") or "",
+        "sponsor_promo": settings.get("sponsor_promo") or "",
+        "sponsor_promo_link": settings.get("sponsor_promo_link") or "",
     }
 
 
@@ -488,8 +493,13 @@ def update_gallery_settings(event_id: str, payload: dict[str, str], db: Session 
     if not event:
         raise HTTPException(404, "Event not found")
     settings = gallery_settings(event)
-    settings["credit_text"] = str(payload.get("credit_text") or "ถ่ายภาพโดยทีมโสตโรงเรียน").strip()
+    settings["credit_text"] = str(payload.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO").strip()
     settings["report_contact"] = str(payload.get("report_contact") or "").strip()
+    settings["sponsor_name"] = str(payload.get("sponsor_name") or "").strip()
+    settings["sponsor_logo"] = str(payload.get("sponsor_logo") or "").strip()
+    settings["sponsor_hashtag"] = str(payload.get("sponsor_hashtag") or "").strip()
+    settings["sponsor_promo"] = str(payload.get("sponsor_promo") or "").strip()
+    settings["sponsor_promo_link"] = str(payload.get("sponsor_promo_link") or "").strip()
     event.gallery_json = json.dumps(settings)
     if cloud_sync_enabled():
         enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
@@ -536,7 +546,7 @@ def delete_event(event_id: str, delete_files: bool = Query(False), db: Session =
         if not root.exists():
             folder_warning = "Event folder was already missing."
         elif not root.is_dir() or not marker.exists():
-            folder_warning = "Skipped folder delete because this path does not look like a MomentLink event folder."
+            folder_warning = "Skipped folder delete because this path does not look like a CS.BXXM STUDIO event folder."
         else:
             try:
                 shutil.rmtree(root)
@@ -580,7 +590,7 @@ def simulate_photo(event_id: str, db: Session = Depends(get_db)):
     img = Image.new("RGB", (2200, 1450), (38, 41, 45))
     draw = ImageDraw.Draw(img)
     draw.rectangle((100, 100, 2100, 1350), outline=(230, 230, 220), width=10)
-    draw.text((180, 180), f"MomentLink Demo\n{event.name}\n{filename}", fill=(245, 245, 235))
+    draw.text((180, 180), f"CS.BXXM STUDIO Demo\n{event.name}\n{filename}", fill=(245, 245, 235))
     img.save(path, "JPEG", quality=94)
     return {"ok": True, "path": str(path)}
 

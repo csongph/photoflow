@@ -203,7 +203,7 @@ class JobWorker:
         if not Path(upload.local_path).exists():
             raise RuntimeError("Variant file is missing")
         refresh_token = (db.get(Setting, "google_refresh_token").value if db.get(Setting, "google_refresh_token") else "")
-        root_folder = (db.get(Setting, "drive_root").value if db.get(Setting, "drive_root") else "MomentLink Events")
+        root_folder = (db.get(Setting, "drive_root").value if db.get(Setting, "drive_root") else "CS.BXXM Events")
         provider = env_provider(refresh_token, root_folder)
         if not provider.configured:
             upload.state = "READY_TO_UPLOAD"

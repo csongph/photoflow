@@ -86,7 +86,7 @@ def login_page(error: str = "") -> HTMLResponse:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Login · MomentLink</title>
+  <title>Login · CS.BXXM STUDIO</title>
   <style>
     * {{ box-sizing: border-box; }}
     :root {{
@@ -367,14 +367,14 @@ def login_page(error: str = "") -> HTMLResponse:
       <div class="shot">PHOTO_SET.JPG</div><div class="shot">FINISHED.JPG</div><div class="shot">LIVE.JPG</div>
     </div>
     <div class="topbar">
-      <div class="identity"><div class="mark">M</div><div><b>MomentLink</b><span>Local Photo Console</span></div></div>
-      <div class="admin-chip">Admin PIN Required</div>
+      <div class="identity"><div class="mark">B</div><div><b>CS.BXXM</b><span>STUDIO · BOOTH CONTROL</span></div></div>
+      <div class="admin-chip">PHOTO BOOTH MASTER</div>
     </div>
     <section class="login-panel" aria-label="Admin login">
       <div class="panel-head">
-        <p class="kicker">Secure Access</p>
-        <h1>เข้าสู่ระบบ</h1>
-        <p>กรอก PIN 6 หลักเพื่อเปิดแผงควบคุมงานถ่ายภาพของทีมงาน</p>
+        <p class="kicker">CS.BXXM STUDIO</p>
+        <h1>เข้าสู่ระบบคุมบูท</h1>
+        <p>กรอก PIN 6 หลักเพื่อเปิดแผงควบคุมระบบโฟโต้บูท</p>
       </div>
       {error_html}
       <form id="pinForm" method="post" action="/api/auth/login">

@@ -2,98 +2,170 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>MomentLink Gallery</title>
-  <link rel="stylesheet" href="/css/gallery.css?v=20261025-gallery-36">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#0b0f14">
+  <meta name="description" content="CS.BXXM STUDIO - Real-time Photo Booth & Event Gallery">
+  <title>CS.BXXM STUDIO · Event Gallery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261026-csbxxm-1">
 </head>
-<body>
-  <header class="hero" id="hero">
-    <nav class="bar">
-      <div class="brand">MomentLink</div>
-      <div id="count" class="count">กำลังโหลด</div>
-    </nav>
-    <div class="hero-copy">
-      <p id="eventDate" class="eyebrow">Event Gallery</p>
-      <h1>MomentLink Gallery</h1>
-      <p id="heroSub" class="hero-sub">รูปภาพจากงานจะอัปเดตอัตโนมัติระหว่างที่ทีมถ่ายภาพกำลังทำงาน</p>
-      <div class="hero-actions">
-        <a href="#grid" class="button">ดูรูปทั้งหมด</a>
-        <button id="shareJump" class="button secondary" onclick="copyShareText()">แชร์ลิงก์</button>
-        <button id="downloadLinks" class="button secondary" onclick="copyDownloadLinks()" style="display:none">คัดลอกลิงก์ดาวน์โหลด</button>
-        <button id="reportHero" class="button secondary" onclick="reportIssue()">แจ้งปัญหา</button>
-      </div>
-      <p id="creditHero" class="credit-line">ถ่ายภาพโดยทีมโสตโรงเรียน</p>
-    </div>
-    <div class="hero-stats" aria-label="สถานะของแกลเลอรี">
-      <div><span id="statPhotos">0</span><small>รูปพร้อมดู</small></div>
-      <div><span>QR</span><small>เปิดบนมือถือได้ทันที</small></div>
-      <div><span id="statMode">Live</span><small>อัปเดตจากงานจริง</small></div>
-    </div>
-    <aside class="screen-qr" aria-label="QR สำหรับเปิดแกลเลอรีบนมือถือ">
-      <div class="screen-qr-copy">
-        <span>Scan to save</span>
-        <strong>เปิดแกลเลอรีบนมือถือ</strong>
-      </div>
-      <img id="screenQr" alt="QR code สำหรับเปิดแกลเลอรี">
-    </aside>
-  </header>
-
-  <main class="wrap">
-    <section id="pinPanel" class="pin-panel" style="display:none">
-      <div>
-        <p class="eyebrow">Private Gallery</p>
-        <h2>ใส่ PIN เพื่อดูรูป</h2>
-        <p class="section-copy">Gallery นี้ถูกตั้งค่าเป็นส่วนตัวสำหรับงานโรงเรียน</p>
-      </div>
-      <form onsubmit="unlockGallery(event)" class="pin-form">
-        <input id="galleryPin" type="password" inputmode="numeric" placeholder="PIN">
-        <button>เปิด Gallery</button>
-      </form>
-    </section>
-
-    <section class="section-head">
-      <div>
-        <p class="eyebrow">Photos</p>
-        <h2>รูปภาพในงาน</h2>
-        <p class="section-copy">แตะรูปเพื่อดูขนาดใหญ่ ดาวน์โหลด หรือกลับมาดูใหม่จากลิงก์ QR เดิม</p>
-      </div>
-      <div class="toolbar">
-        <span id="syncState">อัปเดตอัตโนมัติ</span>
-        <button id="selectModeBtn" class="icon-button" onclick="toggleSelectionMode()" aria-pressed="false">เลือกหลายรูป</button>
-        <span id="selectedCount" class="selected-count" hidden>เลือก 0 รูป</span>
-        <button id="downloadSelectedBtn" class="icon-button" onclick="downloadSelectedPhotos()" disabled hidden>ดาวน์โหลดที่เลือก</button>
-        <button class="icon-button" onclick="loadPhotos(true)" title="โหลดรูปใหม่">รีเฟรช</button>
-      </div>
-    </section>
-
-    <section id="grid" class="grid" aria-live="polite">
-      <div class="empty">กำลังโหลดรูปภาพ</div>
-    </section>
-
-    <section class="mobile-qr-panel" aria-label="QR สำหรับเปิดแกลเลอรีบนมือถือ">
-      <div>
-        <p class="eyebrow">QR Gallery</p>
-        <h2>เปิดบนมือถือได้ทันที</h2>
-        <p class="section-copy">สแกน QR หรือคัดลอกลิงก์นี้เพื่อกลับมาดาวน์โหลดรูปภายหลัง</p>
-        <div id="mobileGalleryUrl" class="gallery-url"></div>
-        <div class="hero-actions mobile-actions">
-          <button class="button" onclick="copyShareText()">คัดลอกลิงก์</button>
-          <button class="button secondary dark" onclick="reportIssue()">แจ้งปัญหา</button>
+<body class="theme-dark">
+  <!-- Top Navigation & Co-Branding Bar -->
+  <header class="top-bar">
+    <div class="bar-inner">
+      <div class="brand-group">
+        <a href="/" class="brand-badge">
+          <span class="brand-logo-text">CS.BXXM</span>
+          <span class="brand-sub">STUDIO</span>
+        </a>
+        <div id="sponsorDivider" class="co-divider" style="display:none">×</div>
+        <div id="sponsorBadge" class="sponsor-badge" style="display:none">
+          <img id="sponsorLogo" class="sponsor-logo" alt="Sponsor Logo" style="display:none">
+          <span id="sponsorName" class="sponsor-name"></span>
         </div>
       </div>
-      <img id="mobileQr" alt="QR code สำหรับเปิดแกลเลอรี">
+      
+      <div class="bar-status">
+        <div class="live-pill" id="liveBadge" title="กำลังเชื่อมต่อระบบถ่ายภาพสด">
+          <span class="live-dot"></span>
+          <span id="syncStateText">LIVE SYNC</span>
+        </div>
+        <div id="count" class="count-pill">0 รูป</div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Compact Hero Section (Above the fold) -->
+  <section class="compact-hero" id="hero">
+    <div class="hero-inner">
+      <div class="hero-header">
+        <div class="hero-meta">
+          <span id="eventDate" class="event-date-chip">EVENT GALLERY</span>
+          <div id="hashtagChip" class="hashtag-chip" onclick="copyHashtag()" style="display:none" title="แตะเพื่อคัดลอกแฮชแท็ก">
+            <span class="hashtag-icon">#</span>
+            <span id="hashtagText">Event</span>
+            <span class="copy-hint">คัดลอก</span>
+          </div>
+        </div>
+        <h1 id="eventTitle">CS.BXXM GALLERY</h1>
+        <p id="heroSub" class="hero-description">รูปภาพจะอัปเดตอัตโนมัติแบบเรียลไทม์จากงาน</p>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Main Content Wrap -->
+  <main class="wrap">
+    <!-- Private PIN Gate -->
+    <section id="pinPanel" class="pin-panel" style="display:none">
+      <div class="pin-card">
+        <div class="pin-icon">🔒</div>
+        <p class="section-eyebrow">PRIVATE GALLERY</p>
+        <h2>ใส่ PIN เพื่อเข้าดูรูป</h2>
+        <p class="pin-desc">แกลเลอรีนี้ถูกตั้งค่าเป็นส่วนตัว กรุณากรอกรหัสผ่านจากทีมงาน</p>
+        <form onsubmit="unlockGallery(event)" class="pin-form">
+          <input id="galleryPin" type="password" inputmode="numeric" placeholder="กรอกรหัส PIN" autofocus maxlength="12">
+          <button type="submit" class="btn btn-primary">เข้าสู่แกลเลอรี</button>
+        </form>
+      </div>
     </section>
 
+    <!-- Toolbar & Filter Tabs -->
+    <section class="gallery-controls">
+      <div class="filter-tabs">
+        <button id="filterAll" class="tab-btn active" onclick="setPhotoFilter('all')">รูปทั้งหมด</button>
+        <button id="filterRecent" class="tab-btn" onclick="setPhotoFilter('recent')">
+          <span class="tab-sparkle">⚡</span> ล่าสุด <span id="recentCount" class="tab-count" style="display:none">0</span>
+        </button>
+      </div>
+
+      <div class="toolbar-actions">
+        <button id="selectModeBtn" class="btn btn-ghost" onclick="toggleSelectionMode()" aria-pressed="false">
+          <span class="btn-icon">✓</span> เลือกหลายรูป
+        </button>
+        <button class="btn btn-ghost icon-only" onclick="loadPhotos(true)" title="รีเฟรชรูปภาพ">
+          <span class="btn-icon">🔄</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Photo Stream Grid -->
+    <section id="grid" class="photo-grid" aria-live="polite">
+      <!-- Skeletons rendered by JS initially -->
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+      <div class="skeleton-card"></div>
+    </section>
+
+    <!-- Mobile QR Card (สำหรับแชร์หรือเปิดต่อ) -->
+    <section class="qr-share-card">
+      <div class="qr-share-body">
+        <p class="section-eyebrow">SCAN & SHARE</p>
+        <h3>เปิดแกลเลอรีนี้บนอุปกรณ์อื่น</h3>
+        <p class="qr-share-desc">สแกน QR Code หรือแตะคัดลอกลิงก์เพื่อส่งต่อให้เพื่อนหรือเปิดดูภายหลัง</p>
+        <div class="qr-actions">
+          <button class="btn btn-secondary" onclick="copyShareText()">
+            <span class="btn-icon">🔗</span> คัดลอกลิงก์แกลเลอรี
+          </button>
+          <button class="btn btn-ghost" onclick="reportIssue()">
+            <span class="btn-icon">💬</span> แจ้งปัญหา
+          </button>
+        </div>
+      </div>
+      <div class="qr-share-image-wrap">
+        <img id="mobileQr" class="qr-code-img" alt="QR Code สำหรับเปิดแกลเลอรี">
+      </div>
+    </section>
+
+    <!-- Studio & Owner Footer -->
     <footer class="gallery-footer">
-      <strong id="creditFooter">ถ่ายภาพโดยทีมโสตโรงเรียน</strong>
-      <span id="reportFooter">พบปัญหารูปเสียหรือดาวน์โหลดไม่ได้ กด “แจ้งปัญหา” เพื่อคัดลอกรายละเอียดให้ทีมงาน</span>
+      <div class="owner-badge">
+        <span class="owner-icon">⚡</span>
+        <span class="owner-label">Photo Booth Experience by</span>
+        <a href="https://instagram.com/cs.bxxm" target="_blank" rel="noopener" class="owner-brand">
+          CS.BXXM STUDIO <span class="handle">(@cs.bxxm)</span> ↗
+        </a>
+      </div>
+      <div class="footer-meta">
+        <span id="creditFooter" class="credit-text"></span>
+        <span id="reportFooter" class="report-text"></span>
+      </div>
     </footer>
   </main>
 
-  <div id="lightbox" class="modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
+  <!-- Floating Mobile Action Dock -->
+  <aside class="floating-dock" id="floatingDock">
+    <div class="dock-container">
+      <div id="normalDock" class="dock-row">
+        <button class="btn btn-primary dock-btn" onclick="copyDownloadLinks()" id="downloadLinks">
+          <span class="btn-icon">⚡</span> ดาวน์โหลดทั้งหมด
+        </button>
+        <button class="btn btn-secondary dock-btn" onclick="shareGalleryNative()">
+          <span class="btn-icon">🔗</span> แชร์แกลเลอรี
+        </button>
+      </div>
+
+      <div id="selectionDock" class="dock-row selection-dock" style="display:none">
+        <span id="selectedCount" class="selection-pill">เลือก 0 รูป</span>
+        <button id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="downloadSelectedPhotos()" disabled>
+          <span class="btn-icon">↓</span> ดาวน์โหลดที่เลือก
+        </button>
+        <button class="btn btn-ghost dock-btn" onclick="toggleSelectionMode()">ยกเลิก</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Interactive Lightbox Modal -->
+  <div id="lightbox" class="lightbox-modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
+
+  <!-- Toast Notification Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261025-gallery-36"></script>
+  <script src="/js/gallery.js?v=20261026-csbxxm-1"></script>
   <script>initGallery()</script>
 </body>
 </html>
-

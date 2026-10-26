@@ -39,7 +39,7 @@ def status(db: Session = Depends(get_db)):
     return {
         "configured": google_configured(),
         "connected": bool(refresh_token),
-        "root_folder": get_setting(db, "drive_root", "MomentLink Events"),
+        "root_folder": get_setting(db, "drive_root", "CS.BXXM Events"),
         "ready_to_upload": ready,
         "uploaded": uploaded,
         "redirect_uri": os.getenv("GOOGLE_REDIRECT_URI", ""),

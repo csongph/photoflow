@@ -31,7 +31,7 @@ class StorageProvider(Protocol):
 class GoogleDriveProvider:
     name = "google_drive"
 
-    def __init__(self, client_id: str, client_secret: str, refresh_token: str | None = None, root_folder_name: str = "MomentLink Events"):
+    def __init__(self, client_id: str, client_secret: str, refresh_token: str | None = None, root_folder_name: str = "CS.BXXM Events"):
         self.client_id = client_id
         self.client_secret = client_secret
         self.refresh_token = refresh_token
@@ -67,7 +67,7 @@ class GoogleDriveProvider:
         return response.json()["access_token"]
 
     def ensure_folder(self, access_token: str, name: str, parent_id: str | None = None) -> str:
-        safe_name = name.replace("'", "").strip()[:120] or "MomentLink"
+        safe_name = name.replace("'", "").strip()[:120] or "CS.BXXM Studio"
         query = f"name = '{safe_name}' and mimeType = 'application/vnd.google-apps.folder' and trashed = false"
         if parent_id:
             query += f" and '{parent_id}' in parents"
@@ -129,7 +129,7 @@ class GoogleDriveProvider:
         }
 
 
-def env_provider(refresh_token: str | None, root_folder_name: str = "MomentLink Events") -> GoogleDriveProvider:
+def env_provider(refresh_token: str | None, root_folder_name: str = "CS.BXXM Events") -> GoogleDriveProvider:
     return GoogleDriveProvider(
         client_id=os.getenv("GOOGLE_CLIENT_ID", ""),
         client_secret=os.getenv("GOOGLE_CLIENT_SECRET", ""),
