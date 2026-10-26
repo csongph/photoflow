@@ -28,9 +28,6 @@ def event_out(event: Event, settings: GallerySettings | None, *, include_photos:
             "auto_refresh": settings.auto_refresh if settings else True,
             "credit_text": settings.credit_text if settings else "",
             "report_contact": settings.report_contact if settings else "",
-            "sponsor_name": settings.sponsor_name if settings else "",
-            "sponsor_logo": settings.sponsor_logo if settings else "",
-            "sponsor_hashtag": settings.sponsor_hashtag if settings else "",
         },
         "photos": [
             {
@@ -93,7 +90,7 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
     db.add(event)
     db.flush()
-    allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact", "sponsor_name", "sponsor_logo", "sponsor_hashtag"}
+    allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact"}
     gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
     enabled = incoming_settings.get("enable_gallery", True)
     if not isinstance(enabled, bool):
@@ -108,9 +105,6 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     for key, limit in (
         ("credit_text", 220),
         ("report_contact", 220),
-        ("sponsor_name", 180),
-        ("sponsor_logo", 2048),
-        ("sponsor_hashtag", 120),
     ):
         value = incoming_settings.get(key, "")
         if not isinstance(value, str) or len(value) > limit:

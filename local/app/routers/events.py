@@ -479,11 +479,6 @@ def get_gallery_settings(event_id: str, db: Session = Depends(get_db)):
     return {
         "credit_text": settings.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO",
         "report_contact": settings.get("report_contact") or "",
-        "sponsor_name": settings.get("sponsor_name") or "",
-        "sponsor_logo": settings.get("sponsor_logo") or "",
-        "sponsor_hashtag": settings.get("sponsor_hashtag") or "",
-        "sponsor_promo": settings.get("sponsor_promo") or "",
-        "sponsor_promo_link": settings.get("sponsor_promo_link") or "",
     }
 
 
@@ -495,11 +490,8 @@ def update_gallery_settings(event_id: str, payload: dict[str, str], db: Session 
     settings = gallery_settings(event)
     settings["credit_text"] = str(payload.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO").strip()
     settings["report_contact"] = str(payload.get("report_contact") or "").strip()
-    settings["sponsor_name"] = str(payload.get("sponsor_name") or "").strip()
-    settings["sponsor_logo"] = str(payload.get("sponsor_logo") or "").strip()
-    settings["sponsor_hashtag"] = str(payload.get("sponsor_hashtag") or "").strip()
-    settings["sponsor_promo"] = str(payload.get("sponsor_promo") or "").strip()
-    settings["sponsor_promo_link"] = str(payload.get("sponsor_promo_link") or "").strip()
+    for key in ("sponsor_name", "sponsor_logo", "sponsor_hashtag", "sponsor_promo", "sponsor_promo_link"):
+        settings.pop(key, None)
     event.gallery_json = json.dumps(settings)
     if cloud_sync_enabled():
         enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)

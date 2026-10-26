@@ -84,7 +84,7 @@ button {
 }
 
 /* ==========================================================================
-   1. TOP NAVIGATION & CO-BRANDING BAR
+   1. TOP NAVIGATION BAR
    ========================================================================== */
 
 .top-bar {
@@ -145,35 +145,6 @@ button {
   font-weight: 700;
   letter-spacing: 0.12em;
   color: var(--text-muted);
-}
-
-.co-divider {
-  color: var(--text-muted);
-  font-size: 14px;
-  font-weight: 300;
-  opacity: 0.6;
-}
-
-.sponsor-badge {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-}
-
-.sponsor-logo {
-  height: 20px;
-  max-width: 80px;
-  object-fit: contain;
-}
-
-.sponsor-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
 }
 
 .bar-status {
@@ -252,33 +223,6 @@ button {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--accent-primary);
-}
-
-.hashtag-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 4px 10px;
-  background: rgba(56, 189, 248, 0.08);
-  border: 1px solid rgba(56, 189, 248, 0.2);
-  border-radius: var(--radius-pill);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--accent-primary);
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.hashtag-chip:hover {
-  background: rgba(56, 189, 248, 0.16);
-  border-color: var(--accent-primary);
-  transform: translateY(-1px);
-}
-
-.hashtag-chip .copy-hint {
-  font-size: 10px;
-  opacity: 0.6;
-  margin-left: 2px;
 }
 
 .compact-hero h1 {

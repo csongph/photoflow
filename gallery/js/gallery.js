@@ -1,6 +1,6 @@
 /**
  * CS.BXXM STUDIO - Real-Time Photo Booth Gallery Script
- * High-performance mobile viewer, Web Share API, Sponsor Engine, and 1-Tap Downloads.
+ * High-performance mobile viewer, Web Share API, and 1-Tap Downloads.
  */
 
 const params = new URLSearchParams(location.search);
@@ -16,10 +16,7 @@ let galleryUrl = location.href.split("#")[0];
 let galleryMeta = {
   eventName: "CS.BXXM Gallery",
   creditText: "Photo Booth Experience by CS.BXXM STUDIO",
-  reportContact: "",
-  sponsorName: "",
-  sponsorLogo: "",
-  sponsorHashtag: ""
+  reportContact: ""
 };
 
 let galleryPhotos = [];
@@ -53,15 +50,6 @@ function escapeHtml(value) {
     '"': "&quot;",
     "'": "&#39;"
   })[ch]);
-}
-
-function safeExternalUrl(value) {
-  try {
-    const url = new URL(value, location.href);
-    return ["http:", "https:"].includes(url.protocol) ? url.href : "";
-  } catch {
-    return "";
-  }
 }
 
 async function getJson(url) {
@@ -116,18 +104,14 @@ async function initGallery() {
     const brandHome = document.querySelector("#brandHome");
     if (brandHome) brandHome.href = galleryUrl;
 
-    // Settings & Sponsors
+    // Gallery settings
     const s = meta.settings || {};
     galleryMeta = {
       eventName,
       creditText: s.credit_text || "Photo Booth Experience by CS.BXXM STUDIO",
-      reportContact: s.report_contact || "",
-      sponsorName: s.sponsor_name || "",
-      sponsorLogo: s.sponsor_logo || "",
-      sponsorHashtag: s.sponsor_hashtag || (eventName ? `#${eventName.replace(/\s+/g, "")}` : "")
+      reportContact: s.report_contact || ""
     };
 
-    renderBrandAndSponsors();
     renderGalleryInfo();
 
     const dateEl = document.querySelector("#eventDate");
@@ -175,40 +159,6 @@ function updatePhotoCountUI(count) {
   }
 }
 
-function renderBrandAndSponsors() {
-  // Sponsor in Top Bar
-  const sponsorBadge = document.querySelector("#sponsorBadge");
-  const sponsorDivider = document.querySelector("#sponsorDivider");
-  const sponsorName = document.querySelector("#sponsorName");
-  const sponsorLogo = document.querySelector("#sponsorLogo");
-
-  if (galleryMeta.sponsorName || galleryMeta.sponsorLogo) {
-    if (sponsorDivider) sponsorDivider.style.display = "inline";
-    if (sponsorBadge) sponsorBadge.style.display = "inline-flex";
-    if (sponsorName && galleryMeta.sponsorName) {
-      sponsorName.textContent = galleryMeta.sponsorName;
-      sponsorName.style.display = "inline";
-    }
-    if (sponsorLogo && galleryMeta.sponsorLogo) {
-      const logoUrl = safeExternalUrl(galleryMeta.sponsorLogo);
-      if (logoUrl) {
-        sponsorLogo.src = logoUrl;
-        sponsorLogo.style.display = "inline";
-        sponsorLogo.onerror = () => { sponsorLogo.style.display = "none"; };
-      }
-    }
-  }
-
-  // Hashtag Chip
-  const hashtagChip = document.querySelector("#hashtagChip");
-  const hashtagText = document.querySelector("#hashtagText");
-  if (galleryMeta.sponsorHashtag) {
-    if (hashtagChip) hashtagChip.style.display = "inline-flex";
-    if (hashtagText) hashtagText.textContent = galleryMeta.sponsorHashtag.replace(/^#/, "");
-  }
-
-}
-
 function setupScreenQr() {
   const mobileQr = document.querySelector("#mobileQr");
   const qrUrl = `${API}/api/gallery/${publicId}/qr.png`;
@@ -230,16 +180,6 @@ function renderGalleryInfo() {
 // -------------------------------------------------------------------------
 // INTERACTIONS & COPY
 // -------------------------------------------------------------------------
-
-async function copyHashtag() {
-  if (!galleryMeta.sponsorHashtag) return;
-  try {
-    await navigator.clipboard.writeText(galleryMeta.sponsorHashtag);
-    showToast(`คัดลอก ${galleryMeta.sponsorHashtag} แล้ว! พร้อมนำไปโพสต์`, "success");
-  } catch (err) {
-    console.error(err);
-  }
-}
 
 async function copyShareText() {
   const text = `เปิดดูรูปถ่ายและดาวน์โหลดความคมชัดสูงจากงาน ${galleryMeta.eventName}:\n${galleryUrl}`;

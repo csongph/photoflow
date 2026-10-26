@@ -47,6 +47,8 @@ def event_payload(event: Event) -> dict[str, Any]:
     except json.JSONDecodeError:
         gallery_settings = {}
     pin = str(gallery_settings.pop("optional_pin", "") or "").strip()
+    for key in ("sponsor_name", "sponsor_logo", "sponsor_hashtag", "sponsor_promo", "sponsor_promo_link"):
+        gallery_settings.pop(key, None)
     gallery_settings["pin_hash"] = hashlib.sha256(pin.encode("utf-8")).hexdigest() if pin else ""
     return {
         "public_id": event.public_id,

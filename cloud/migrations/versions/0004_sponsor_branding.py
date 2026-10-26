@@ -1,11 +1,13 @@
-"""Add sponsor branding to cloud gallery settings.
+"""Compatibility revision after removing sponsor branding.
 
 Revision ID: 0004_sponsor_branding
 Revises: 0003_disable_face_search
+
+This revision intentionally does not add columns. Keeping the revision in the
+chain lets databases that already recorded it continue to migrate safely.
 """
 
 from alembic import op
-import sqlalchemy as sa
 
 
 revision = "0004_sponsor_branding"
@@ -15,12 +17,8 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.add_column("gallery_settings", sa.Column("sponsor_name", sa.String(180), nullable=False, server_default=""))
-    op.add_column("gallery_settings", sa.Column("sponsor_logo", sa.String(2048), nullable=False, server_default=""))
-    op.add_column("gallery_settings", sa.Column("sponsor_hashtag", sa.String(120), nullable=False, server_default=""))
+    pass
 
 
 def downgrade() -> None:
-    op.drop_column("gallery_settings", "sponsor_hashtag")
-    op.drop_column("gallery_settings", "sponsor_logo")
-    op.drop_column("gallery_settings", "sponsor_name")
+    pass
