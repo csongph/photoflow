@@ -10,7 +10,7 @@ class GallerySettings(BaseModel):
     instant_publish: bool = True
     review_before_publish: bool = False
     optional_pin: str = ""
-    credit_text: str = "ถ่ายภาพโดยทีมโสตโรงเรียน"
+    credit_text: str = "Photo Booth Experience by CS.BXXM STUDIO"
     report_contact: str = ""
     photobooth_frame_enabled: bool = False
 

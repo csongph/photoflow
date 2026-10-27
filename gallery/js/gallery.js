@@ -186,11 +186,29 @@ function renderGalleryInfo() {
   if (creditEl) creditEl.textContent = galleryMeta.creditText;
 
   const reportEl = document.querySelector("#reportFooter");
-  if (reportEl) {
-    reportEl.textContent = galleryMeta.reportContact
-      ? `พบปัญหารูปภาพหรือติดต่อทีมงาน: ${galleryMeta.reportContact}`
-      : "พบปัญหารูปภาพหรือดาวน์โหลดไม่ได้ กด “แจ้งปัญหา” เพื่อส่งรายละเอียดให้ทีมงาน";
+  const contactEl = document.querySelector("#contactOwner");
+  const contactUrl = normalizeContactUrl(galleryMeta.reportContact);
+  if (contactEl && contactUrl) {
+    contactEl.href = contactUrl;
+    contactEl.target = "_blank";
+    contactEl.rel = "noopener noreferrer";
+    contactEl.hidden = false;
   }
+  if (reportEl) reportEl.textContent = galleryMeta.reportContact ? "ติดต่อฉันผ่านช่องทางด้านบนได้เลย" : "แชร์แกลเลอรีนี้ให้เพื่อน แล้วดาวน์โหลดรูปที่ชอบได้ทันที";
+}
+
+function normalizeContactUrl(value) {
+  const contact = String(value || "").trim();
+  if (!contact) return "";
+  if (/^(https?:\/\/|mailto:|tel:)/i.test(contact)) return contact;
+  if (/^[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}$/.test(contact)) return `mailto:${contact}`;
+  if (/^\+?[\d\s().-]{7,}$/.test(contact)) return `tel:${contact.replace(/[^+\d]/g, "")}`;
+  if (/^@?[\w.-]{2,}$/.test(contact)) {
+    return contact.startsWith("@")
+      ? `https://line.me/R/ti/p/~${encodeURIComponent(contact.slice(1))}`
+      : `https://instagram.com/${contact}`;
+  }
+  return `https://line.me/R/ti/p/~${encodeURIComponent(contact)}`;
 }
 
 // -------------------------------------------------------------------------

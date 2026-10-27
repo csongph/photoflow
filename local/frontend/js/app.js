@@ -84,7 +84,7 @@ function layout(active, content) {
 }
 
 async function loadDashboard() {
-  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO · ศูนย์ควบคุมงานถ่ายภาพ</p><h1>Photo Booth Master</h1><p class="hero-note">ติดตามงานถ่าย จัดการคิว และเปิดแกลเลอรีให้แขกได้จากที่เดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรชข้อมูล</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
+  layout("dashboard", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO · PHOTO BOOTH</p><h1>ภาพรวมงานถ่าย</h1><p class="hero-note">ดูสถานะรูป จัดการกรอบ และเปิดแกลเลอรีให้ผู้ร่วมงานจากที่เดียว</p></div><div class="row hero-actions-admin"><a class="button secondary" href="/setup">ตรวจความพร้อม</a><button class="secondary" onclick="loadDashboard()">รีเฟรชข้อมูล</button><div class="status pill"><span class="dot"></span><span id="live">กำลังโหลด</span></div></div></div>
   <div class="grid">
     <section class="panel span-8 main-card"><div class="section-heading"><div><p class="section-eyebrow">กำลังดำเนินการ</p><h2>งานที่กำลังทำ</h2></div></div><div id="active"></div></section>
     <section class="panel span-4"><div class="section-heading"><div><p class="section-eyebrow">ภาพรวม</p><h2>สถานะระบบ</h2></div></div><div id="health"></div></section>
@@ -100,7 +100,7 @@ async function loadDashboard() {
   }
   $("#live").textContent = data.active_event.status;
   const c = data.counts;
-  const metricLabels = { captured: "เข้าระบบ", processed: "พร้อมแสดง", uploaded: "อัปโหลด", published: "เผยแพร่", review: "รอตรวจ", queue: "คิวรอ", failed: "ผิดพลาด" };
+  const metricLabels = { captured: "รับรูปแล้ว", processed: "ประมวลผลแล้ว", uploaded: "อัปโหลดแล้ว", published: "แสดงในแกลเลอรี", review: "รอตรวจ", queue: "รอประมวลผล", failed: "ผิดพลาด" };
   $("#active").innerHTML = `<div class="event-title"><h1>${html(data.active_event.name)}</h1><span class="status pill"><span class="dot"></span>${html(data.active_event.status)}</span></div>
     <div class="metrics">
       ${["captured","processed","uploaded","published","review","queue","failed"].map(k => `<div class="metric"><span class="muted">${metricLabels[k]}</span><b>${c[k] ?? 0}</b></div>`).join("")}
@@ -188,20 +188,20 @@ async function retryJob(eventId, jobId) { await api(`/api/events/${eventId}/fail
 async function retryAll(eventId) { await api(`/api/events/${eventId}/failed-jobs/retry-all`, { method: "POST" }); loadDashboard(); }
 
 async function loadEvents() {
-  layout("events", `<div class="top hero-panel"><div><p class="kicker">Event Setup</p><h1>Create Event</h1></div></div>
+  layout("events", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO · PHOTO BOOTH</p><h1>สร้างงานถ่ายภาพ</h1><p class="hero-note">ตั้งค่าวันงาน กรอบธีม และแกลเลอรีสำหรับผู้ร่วมงาน</p></div></div>
   <div class="grid"><form id="eventForm" class="panel span-7">
-    <label><span>Event Name</span><input name="name" required placeholder="Freshy 2026"></label>
-    <label><span>Description</span><textarea name="description"></textarea></label>
-    <label><span>Date</span><input name="event_date" type="date"></label>
+    <label><span>ชื่องาน</span><input name="name" required placeholder="งานเลี้ยงรุ่น 2026"></label>
+    <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
+    <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>กรอบรูปสำหรับงานนี้</h2><p class="muted">อัปโหลดกรอบ PNG โปร่งใสแยกแนวนอนและแนวตั้ง ระบบเลือกกรอบให้ตรงกับภาพแต่ละใบโดยอัตโนมัติ เก็บภาพต้นฉบับไว้เหมือนเดิม หากใช้กรอบเดียว ระบบจะรักษาสัดส่วนและเว้นพื้นที่โปร่งใสแทนการยืดหรือตัดกรอบ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>กรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><img id="photoboothFrameLandscapePreview" class="frame-preview" alt="ตัวอย่างกรอบแนวนอน" hidden><label><span>กรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><img id="photoboothFramePortraitPreview" class="frame-preview" alt="ตัวอย่างกรอบแนวตั้ง" hidden><div id="frameUploadResult"></div></section>
-    <h2>Gallery</h2><div class="checks">${["enable_gallery","allow_download"].map(k => `<label class="check"><input type="checkbox" name="${k}" checked>${k.replaceAll("_"," ")}</label>`).join("")}<label class="check"><input type="checkbox" name="instant_publish" checked disabled>auto publish</label></div>
-    <label><span>Optional PIN</span><input name="optional_pin"></label>
-    <label><span>Gallery Credit</span><input name="credit_text" value="ถ่ายภาพโดยทีมโสตโรงเรียน"></label>
-    <label><span>Report Contact</span><input name="report_contact" placeholder="LINE @school-av หรืออีเมลทีมงาน"></label>
-    <h2>Google Drive</h2><div class="checks"><label class="check"><input type="checkbox" name="upload_finished_photos" checked>Upload Finished Photos Before Gallery</label><label class="check"><input type="checkbox" name="upload_originals">Upload Originals</label></div>
-    <button>Create Event</button>
-  </form><section class="panel span-5"><div class="preview-head"><div><h2>Events</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">Scan Local Folders</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
+    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>ออกแบบกรอบและธีม</h2><p class="muted">อัปโหลดกรอบ PNG โปร่งใส แล้วทดลองดูบนภาพตัวอย่างก่อนใช้จริง ระบบเลือกกรอบแนวนอนหรือแนวตั้งให้ตรงกับรูปโดยอัตโนมัติและเก็บภาพต้นฉบับไว้</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>กรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><label><span>กรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างธีม</b><p class="muted">เมื่อเลือกไฟล์กรอบ จะแสดงตัวอย่างซ้อนบนภาพจำลองที่นี่</p></div></div><div id="frameUploadResult"></div></section>
+    <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
+    <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
+    <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
+    <label><span>ช่องทางติดต่อของคุณ</span><input name="report_contact" placeholder="Instagram, LINE, อีเมล หรือเว็บไซต์"></label>
+    <h2>สำรองรูปด้วย Google Drive</h2><div class="checks"><label class="check"><input type="checkbox" name="upload_finished_photos" checked>อัปโหลดรูปพร้อมดาวน์โหลดก่อนเผยแพร่</label><label class="check"><input type="checkbox" name="upload_originals">สำรองไฟล์ต้นฉบับ</label></div>
+    <button>สร้างงานถ่ายภาพ</button>
+  </form><section class="panel span-5"><div class="preview-head"><div><h2>งานในระบบ</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">ค้นหางานจากโฟลเดอร์</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
   $("#eventForm").addEventListener("submit", createEvent);
   $("#photoboothFrameLandscape").addEventListener("change", previewPhotoboothFrame);
   $("#photoboothFramePortrait").addEventListener("change", previewPhotoboothFrame);
@@ -210,8 +210,8 @@ async function loadEvents() {
 
 function previewPhotoboothFrame(ev) {
   const file = ev.target.files?.[0];
-  const preview = ev.target.id === "photoboothFrameLandscape" ? $("#photoboothFrameLandscapePreview") : $("#photoboothFramePortraitPreview");
-  const previewKey = `__${ev.target.id}Url`;
+  const preview = $("#frameOverlayPreview");
+  const previewKey = "__frameOverlayPreviewUrl";
   if (window[previewKey]) URL.revokeObjectURL(window[previewKey]);
   if (!file) {
     preview.hidden = true;
@@ -227,6 +227,7 @@ function previewPhotoboothFrame(ev) {
   window[previewKey] = URL.createObjectURL(file);
   preview.src = window[previewKey];
   preview.hidden = false;
+  $("#frameSample").classList.add("has-frame");
 }
 
 async function uploadPhotoboothFrame(eventId, file, orientation) {
@@ -255,7 +256,7 @@ async function retryPhotoboothFrame(eventId) {
 
 async function renderEvents() {
   const events = await api("/api/events");
-  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${html(e.name)}<br><small class="muted">${html(e.status)}</small></span><span class="row"><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>Start</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
+  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${html(e.name)}<br><small class="muted">${html(e.status)}</small></span><span class="row"><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>เริ่มงาน</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
 }
 
 async function loadImportableEvents() {
@@ -296,7 +297,7 @@ async function createEvent(ev) {
   }
   const payload = {
     name: f.get("name"), description: f.get("description"), event_date: f.get("event_date"),
-    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "ถ่ายภาพโดยทีมโสตโรงเรียน", report_contact: f.get("report_contact") || "" }),
+    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "Photo Booth Experience by CS.BXXM STUDIO", report_contact: f.get("report_contact") || "" }),
     drive: { upload_finished_photos: checked("upload_finished_photos"), upload_originals: checked("upload_originals") }
   };
   const event = await api("/api/events", { method: "POST", body: JSON.stringify(payload) });
@@ -379,7 +380,7 @@ async function loadSettings() {
     </section>
 
     <section class="panel settings-card span-5">
-      <div class="settings-card-head"><div><p class="kicker">Downloads</p><h2>Google Drive</h2><p class="muted">ใช้เก็บไฟล์ finished สำหรับให้ผู้ใช้ดาวน์โหลดจริง</p></div><span class="status pill">${google.connected ? "CONNECTED" : "NOT CONNECTED"}</span></div>
+      <div class="settings-card-head"><div><p class="kicker">Downloads</p><h2>สำรองรูปด้วย Google Drive</h2><p class="muted">ใช้เก็บไฟล์ finished สำหรับให้ผู้ใช้ดาวน์โหลดจริง</p></div><span class="status pill">${google.connected ? "CONNECTED" : "NOT CONNECTED"}</span></div>
       <label><span>Drive Root Folder</span><input name="drive_root" value="${html(google.root_folder || "CS.BXXM Events")}"></label>
       <div class="settings-list">
         <div><span>OAuth Config</span><b>${google.configured ? "READY" : "MISSING"}</b></div>
@@ -503,7 +504,7 @@ async function disconnectGoogle() {
 }
 
 function loadGalleryPreview() {
-  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>Gallery Control</h1><p class="hero-note">รูปจะเผยแพร่อัตโนมัติหลังประมวลผลและอัปโหลด Google Drive สำเร็จ คุณยังซ่อน แสดง หรือสร้างไฟล์ใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">Open Guest Gallery</a><button class="secondary" onclick="loadGalleryPreview()">Refresh</button></div></div><section class="panel"><div class="preview-head"><div><h2>Guest Page Settings</h2><p class="muted">ข้อความเครดิตและช่องทางติดต่อจะแสดงในฝั่งผู้ใช้</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>Gallery Credit</span><input name="credit_text" placeholder="Photo Booth Experience by CS.BXXM STUDIO"></label><label><span>Report Contact</span><input name="report_contact" placeholder="LINE @cs.bxxm หรือเบอร์โทรติดต่อ"></label><button type="submit">Save Settings</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>Photo Status</h2><p class="muted">ไม่ต้องกด Publish รูปใหม่ ระบบจะนำขึ้น Gallery ให้เองเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
+  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>จัดการแกลเลอรี</h1><p class="hero-note">รูปใหม่จะแสดงอัตโนมัติเมื่อพร้อม คุณสามารถซ่อน กู้คืน หรือประมวลผลรูปใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">เปิดแกลเลอรีผู้ชม</a><button class="secondary" onclick="loadGalleryPreview()">รีเฟรช</button></div></div><section class="panel"><div class="preview-head"><div><h2>ข้อมูลที่ผู้เข้าชมเห็น</h2><p class="muted">ตั้งชื่อที่แสดงและช่องทางติดต่อของคุณบนหน้าแกลเลอรี</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" placeholder="Photo Booth Experience by CS.BXXM STUDIO"></label><label><span>ช่องทางติดต่อของคุณ</span><input name="report_contact" placeholder="Instagram, LINE, อีเมล หรือเว็บไซต์"></label><button type="submit">บันทึกข้อมูล</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>สถานะรูปภาพ</h2><p class="muted">รูปใหม่จะแสดงในแกลเลอรีอัตโนมัติเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
   api("/api/dashboard").then(d => {
     if (!d.active_event) {
       $("#publishAllBtn").disabled = true;
@@ -530,7 +531,7 @@ async function loadGuestSettings(eventId) {
     submit.disabled = true;
     try {
       await api(`/api/events/${eventId}/gallery-settings`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
-      alert("บันทึกข้อความและข้อมูลสปอนเซอร์แล้ว");
+      alert("บันทึกข้อมูลแกลเลอรีแล้ว");
     } catch (err) {
       alert(`บันทึกไม่สำเร็จ\n\n${err.message}`);
     } finally {
@@ -558,10 +559,10 @@ function photoReviewCard(eventId, p) {
   const visible = p.published && !p.hidden;
   const status = p.hidden ? "HIDDEN" : p.published ? "PUBLISHED" : p.status;
   const img = ready ? `<a href="${p.preview}" target="_blank"><img src="${p.thumbnail}" alt="${html(p.filename)}"></a>` : `<div class="review-placeholder">${html(p.status || "WAITING")}</div>`;
-  const publish = ready && !visible ? `<button type="button" onclick='publishPhoto(${jsArg(eventId)}, ${jsArg(p.id)})'>Publish</button>` : "";
-  const hideLabel = p.hidden ? "Show" : "Hide";
+  const publish = ready && !visible ? `<button type="button" onclick='publishPhoto(${jsArg(eventId)}, ${jsArg(p.id)})'>เผยแพร่</button>` : "";
+  const hideLabel = p.hidden ? "แสดงรูป" : "ซ่อนรูป";
   const hide = ready ? `<button type="button" class="secondary" onclick='setPhotoHidden(${jsArg(eventId)}, ${jsArg(p.id)}, ${p.hidden ? "false" : "true"})'>${hideLabel}</button>` : "";
-  const retry = `<button type="button" class="secondary" onclick='rebuildOnePhoto(${jsArg(eventId)}, ${jsArg(p.id)})'>Rebuild</button>`;
+  const retry = `<button type="button" class="secondary" onclick='rebuildOnePhoto(${jsArg(eventId)}, ${jsArg(p.id)})'>ทำรูปใหม่</button>`;
   return `<article class="review-card ${visible ? "is-live" : p.hidden ? "is-hidden" : ""}">
     <div class="review-media">${img}<span class="review-badge">${html(status)}</span></div>
     <div class="review-body"><b>${html(p.filename)}</b>${p.error ? `<small class="badtext">${html(p.error)}</small>` : `<small class="muted">${visible ? "กำลังแสดงในฝั่งผู้ใช้" : p.hidden ? "ซ่อนจากฝั่งผู้ใช้" : "ยังไม่แสดงในฝั่งผู้ใช้"}</small>`}<div class="row">${publish}${hide}${retry}</div></div>
@@ -600,13 +601,13 @@ async function rebuildOnePhoto(eventId, photoId) {
 }
 
 async function loadArchive() {
-  layout("archive", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>Event Archive</h1><p class="hero-note">รวมประวัติงานถ่ายทั้งหมด ค้นงานเก่า เปิด Gallery และคัดลอกลิงก์ส่งต่อได้</p></div></div><section class="panel"><div class="preview-head"><div><h2>All Events</h2><p class="muted">แสดงงานทั้งหมดจากฐานข้อมูลในเครื่อง</p></div><button class="secondary" onclick="loadArchive()">Refresh</button></div><div id="archiveList"></div></section>`);
+  layout("archive", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>คลังงานถ่ายภาพ</h1><p class="hero-note">รวมงานถ่ายที่ผ่านมา เปิดแกลเลอรี และแชร์ลิงก์ได้</p></div></div><section class="panel"><div class="preview-head"><div><h2>งานทั้งหมด</h2><p class="muted">แสดงงานทั้งหมดจากฐานข้อมูลในเครื่อง</p></div><button class="secondary" onclick="loadArchive()">รีเฟรช</button></div><div id="archiveList"></div></section>`);
   const events = await api("/api/events");
-  $("#archiveList").innerHTML = events.map(e => `<div class="queue-line"><span><b>${e.name}</b><br><small class="muted">${e.status} · ${e.root_path}</small></span><span class="row"><a class="button secondary" href="${e.gallery_url}" target="_blank">Gallery</a><button class="secondary" onclick='shareGallery(${jsArg(e.gallery_url)}, ${jsArg(e.name)})'>Share</button><button onclick='startEvent(${jsArg(e.id)})'>Start</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "archive")'>Delete</button></span></div>`).join("") || `<p class="muted">ยังไม่มีงานใน Archive</p>`;
+  $("#archiveList").innerHTML = events.map(e => `<div class="queue-line"><span><b>${e.name}</b><br><small class="muted">${e.status} · ${e.root_path}</small></span><span class="row"><a class="button secondary" href="${e.gallery_url}" target="_blank">เปิดแกลเลอรี</a><button class="secondary" onclick='shareGallery(${jsArg(e.gallery_url)}, ${jsArg(e.name)})'>แชร์</button><button onclick='startEvent(${jsArg(e.id)})'>เริ่มงาน</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "archive")'>ลบงาน</button></span></div>`).join("") || `<p class="muted">ยังไม่มีงานในคลัง</p>`;
 }
 
 async function loadDiagnostics() {
-  layout("diagnostics", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>System Diagnostics</h1></div><button onclick="runSystemTest()">Run System Test</button></div><div class="grid"><section class="panel span-8"><h2>System Checks</h2><div id="checks"></div></section><section class="panel span-4"><h2>Queues</h2><div id="diagQueues"></div></section><section class="panel span-4"><h2>Real Database</h2><div id="diagDb"></div></section></div>`);
+  layout("diagnostics", `<div class="top hero-panel"><div><p class="kicker">CS.BXXM STUDIO</p><h1>ตรวจสอบระบบ</h1></div><button onclick="runSystemTest()">ตรวจระบบตอนนี้</button></div><div class="grid"><section class="panel span-8"><h2>รายการตรวจสอบ</h2><div id="checks"></div></section><section class="panel span-4"><h2>คิวงาน</h2><div id="diagQueues"></div></section><section class="panel span-4"><h2>ฐานข้อมูล</h2><div id="diagDb"></div></section></div>`);
   const data = await api("/api/diagnostics");
   renderDiagnostics(data);
 }
@@ -614,7 +615,7 @@ function renderDiagnostics(data) {
   $("#checks").innerHTML = Object.entries(data.checks).map(([k,v]) => {
     const label = k.replace(/^package_/, "package: ").replaceAll("_"," ");
     const tone = v.status === "FAIL" ? "badtext" : v.status === "WARN" ? "warntext" : v.status === "OPTIONAL" ? "optionaltext" : "";
-    const required = v.required ? "Required" : "Optional";
+    const required = v.required ? "จำเป็น" : "ไม่บังคับ";
     return `<div class="queue-line diag-line"><span><b>${label}</b><br><small class="muted">${html(v.message)}</small></span><span class="diag-status"><small>${required}</small><b class="${tone}">${v.status}</b></span></div>`;
   }).join("");
   $("#diagQueues").innerHTML = Object.entries(data.queues).map(([k,v]) => `<div class="queue-line"><span>${k.replaceAll("_"," ")}</span><b>${v}</b></div>`).join("");
@@ -623,5 +624,5 @@ function renderDiagnostics(data) {
 async function runSystemTest() {
   const data = await api("/api/diagnostics/system-test", { method: "POST" });
   renderDiagnostics(data);
-  alert(data.ok ? "System test passed required checks." : `Required checks failed: ${data.failed_required.join(", ")}`);
+  alert(data.ok ? "ตรวจรายการที่จำเป็นผ่านแล้ว" : `ตรวจไม่ผ่าน: ${data.failed_required.join(", ")}`);
 }

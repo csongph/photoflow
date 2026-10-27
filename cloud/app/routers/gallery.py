@@ -198,7 +198,7 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
         "settings": {
             "allow_download": settings.allow_download if settings else True,
             "find_my_photos": False,
-            "credit_text": settings.credit_text if settings and settings.credit_text else "ถ่ายภาพโดยทีมโสตโรงเรียน",
+            "credit_text": settings.credit_text if settings and settings.credit_text else "Photo Booth Experience by CS.BXXM STUDIO",
             "report_contact": settings.report_contact if settings else "",
             "locked": locked,
             "requires_pin": bool(event.pin_hash),
