@@ -111,7 +111,14 @@ class JobWorker:
 
     def _run(self) -> None:
         while not self.stop_event.is_set():
-            handled = self._handle_one()
+            try:
+                handled = self._handle_one()
+            except Exception:
+                # A worker must survive unexpected queue/database errors. An
+                # uncaught exception here permanently kills this worker thread.
+                log.exception("Unexpected error in %s; worker will continue", threading.current_thread().name)
+                time.sleep(1)
+                continue
             if not handled:
                 time.sleep(0.7)
 
@@ -136,6 +143,10 @@ class JobWorker:
             job = self._claim_job(db)
             if not job:
                 return False
+            # Save the scalar key before processing. The job row may be removed
+            # concurrently when its event is deleted while a network upload is
+            # in progress, which expires the ORM object's attributes.
+            job_id = job.id
             try:
                 if job.type == "PROCESS_PHOTO":
                     self._process_photo(db, job)
@@ -150,8 +161,13 @@ class JobWorker:
                 job.state = "PROCESSED"
                 db.commit()
             except Exception as exc:
-                log.exception("Job failed: %s", job.id)
-                self._fail_or_retry(db, job, str(exc))
+                log.exception("Job failed: %s", job_id)
+                db.rollback()
+                current_job = db.get(Job, job_id)
+                if current_job is None:
+                    log.info("Discarding result for job %s because it was deleted during processing", job_id)
+                else:
+                    self._fail_or_retry(db, current_job, str(exc))
             return True
 
     def _process_photo(self, db, job: Job) -> None:
