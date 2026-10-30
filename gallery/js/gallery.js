@@ -63,9 +63,26 @@ async function getJson(url) {
 }
 
 function startNativeDownload(url) {
-  // Navigate directly to the attachment URL so mobile browsers use their
-  // native download manager instead of blocking a scripted blob/new tab.
-  window.location.assign(new URL(url, API).toString());
+  // Target a hidden frame so the browser handles the attachment download while
+  // keeping the gallery document and its live feed in place.
+  let frame = document.getElementById("photoDownloadFrame");
+  if (!frame) {
+    frame = document.createElement("iframe");
+    frame.id = "photoDownloadFrame";
+    frame.name = "photoDownloadFrame";
+    frame.hidden = true;
+    frame.setAttribute("aria-hidden", "true");
+    document.body.appendChild(frame);
+  }
+  const downloadUrl = new URL(url, API);
+  downloadUrl.searchParams.set("_download", String(Date.now()));
+  const link = document.createElement("a");
+  link.href = downloadUrl.toString();
+  link.target = frame.name;
+  link.rel = "noopener";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 // -------------------------------------------------------------------------
