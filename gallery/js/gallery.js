@@ -62,29 +62,6 @@ async function getJson(url) {
   return r.json();
 }
 
-function startNativeDownload(url) {
-  // Target a hidden frame so the browser handles the attachment download while
-  // keeping the gallery document and its live feed in place.
-  let frame = document.getElementById("photoDownloadFrame");
-  if (!frame) {
-    frame = document.createElement("iframe");
-    frame.id = "photoDownloadFrame";
-    frame.name = "photoDownloadFrame";
-    frame.hidden = true;
-    frame.setAttribute("aria-hidden", "true");
-    document.body.appendChild(frame);
-  }
-  const downloadUrl = new URL(url, API);
-  downloadUrl.searchParams.set("_download", String(Date.now()));
-  const link = document.createElement("a");
-  link.href = downloadUrl.toString();
-  link.target = frame.name;
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-}
-
 // -------------------------------------------------------------------------
 // INITIALIZATION
 // -------------------------------------------------------------------------
@@ -254,14 +231,17 @@ async function shareGalleryNative() {
   }
 }
 
-function downloadAllPhotos() {
+function downloadAllPhotos(event) {
+  const link = event.currentTarget;
   if (!knownPhotoCount) {
+    event.preventDefault();
     showToast("ยังไม่มีรูปให้ดาวน์โหลด", "info");
-    return;
+    return false;
   }
   const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
+  link.href = url.toString();
   showToast("กำลังเตรียมไฟล์รูปภาพ...", "info");
-  startNativeDownload(url.toString());
+  return true;
 }
 
 async function reportIssue() {
@@ -373,9 +353,9 @@ function createPhotoCard(photo) {
   card.innerHTML = `
     ${photo.isRecent ? `<span class="photo-badge-new">NEW</span>` : ""}
     <img src="${photo.thumb || photo.preview}" alt="${safeName}" loading="lazy">
-    <button class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" onclick="event.stopPropagation(); triggerFileDownload('${photo.download}', '${photo.filename}')">
+    <a class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" href="${escapeHtml(new URL(photo.download, API).toString())}" download="${safeName}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
       ↓
-    </button>
+    </a>
     <div class="photo-select-mark" aria-hidden="true">✓</div>
   `;
 
@@ -467,35 +447,40 @@ function updateSelectionControls() {
 
   if (countLabel) countLabel.textContent = `เลือก ${count} รูป`;
   if (downloadButton) {
-    downloadButton.disabled = count === 0;
+    downloadButton.setAttribute("aria-disabled", count === 0 ? "true" : "false");
     downloadButton.innerHTML = `<span class="btn-icon">↓</span> ดาวน์โหลด ${count} รูป`;
   }
 }
 
-function downloadSelectedPhotos() {
+function downloadSelectedPhotos(event) {
+  const link = event.currentTarget;
   const photos = [...selectedPhotoIds];
-  if (!photos.length) return;
+  if (!photos.length) {
+    event.preventDefault();
+    return false;
+  }
 
   if (photos.length === 1) {
     const photo = galleryPhotos.find(item => item.id === photos[0]);
-    if (photo) triggerFileDownload(photo.download, photo.filename);
-    return;
+    if (!photo) {
+      event.preventDefault();
+      return false;
+    }
+    link.href = new URL(photo.download, API).toString();
+    return true;
   }
 
   if (photos.length > 40) {
+    event.preventDefault();
     showToast("สามารถเลือกดาวน์โหลดได้ครั้งละไม่เกิน 40 รูป", "info");
-    return;
+    return false;
   }
 
-  showToast(`กำลังเตรียมไฟล์ ZIP ${photos.length} รูป...`, "info");
   const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
   photos.forEach(id => url.searchParams.append("photo_id", id));
-  startNativeDownload(url.toString());
-}
-
-function triggerFileDownload(url, filename) {
-  startNativeDownload(url);
-  showToast("เริ่มดาวน์โหลดแล้ว ตรวจสอบโฟลเดอร์ดาวน์โหลดของมือถือ", "success");
+  link.href = url.toString();
+  showToast(`กำลังเตรียมไฟล์ ZIP ${photos.length} รูป...`, "info");
+  return true;
 }
 
 // -------------------------------------------------------------------------
@@ -529,9 +514,9 @@ function openLightbox(index) {
       </div>
 
       <div class="lightbox-actions">
-    <button class="btn btn-primary" onclick="triggerFileDownload('${photo.download}', '${photo.filename}')">
+    <a class="btn btn-primary" href="${escapeHtml(new URL(photo.download, API).toString())}" download="${safeName}" target="_blank" rel="noopener">
           <span class="btn-icon">↓</span> บันทึกรูปภาพนี้
-        </button>
+    </a>
         <button class="btn btn-secondary" onclick="sharePhotoNative(${index})">
           <span class="btn-icon">↗</span> แชร์รูปนี้ (LINE / IG)
         </button>

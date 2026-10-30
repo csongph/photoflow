@@ -128,9 +128,9 @@
   <aside class="floating-dock" id="floatingDock">
     <div class="dock-container">
       <div id="normalDock" class="dock-row">
-        <button class="btn btn-primary dock-btn" onclick="downloadAllPhotos()" id="downloadLinks">
+        <a class="btn btn-primary dock-btn" onclick="return downloadAllPhotos(event)" id="downloadLinks" href="#" target="_blank" rel="noopener">
           <span class="btn-icon">⚡</span> ดาวน์โหลดทั้งหมด
-        </button>
+        </a>
         <button class="btn btn-secondary dock-btn" onclick="shareGalleryNative()">
           <span class="btn-icon">🔗</span> แชร์แกลเลอรี
         </button>
@@ -138,9 +138,9 @@
 
       <div id="selectionDock" class="dock-row selection-dock" style="display:none">
         <span id="selectedCount" class="selection-pill">เลือก 0 รูป</span>
-        <button id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="downloadSelectedPhotos()" disabled>
+        <a id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="return downloadSelectedPhotos(event)" href="#" target="_blank" rel="noopener" aria-disabled="true">
           <span class="btn-icon">↓</span> ดาวน์โหลดที่เลือก
-        </button>
+        </a>
         <button class="btn btn-ghost dock-btn" onclick="toggleSelectionMode()">ยกเลิก</button>
       </div>
     </div>
@@ -153,7 +153,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261030-csbxxm-5"></script>
+  <script src="/js/gallery.js?v=20261030-csbxxm-7"></script>
   <script>initGallery()</script>
 </body>
 </html>
