@@ -282,11 +282,16 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
         raise HTTPException(404, "Gallery is closed")
     if settings and not settings.allow_download:
         raise HTTPException(403, "Downloads are disabled")
-    finished = db.query(PhotoVariant).filter(
+    variants = db.query(PhotoVariant).filter(
         PhotoVariant.photo_id == photo.id,
-        PhotoVariant.kind == "finished",
-    ).first()
-    if not finished or finished.storage_provider != "google_drive" or not finished.storage_object_id:
+        PhotoVariant.kind.in_(["finished", "preview", "thumbnail"]),
+    ).all()
+    variants_by_kind = {variant.kind: variant for variant in variants}
+    download_variant = next(
+        (variants_by_kind[kind] for kind in ("finished", "preview", "thumbnail") if kind in variants_by_kind),
+        None,
+    )
+    if not download_variant or download_variant.storage_provider != "google_drive" or not download_variant.storage_object_id:
         raise HTTPException(404, "Download file not found")
 
     temp = tempfile.NamedTemporaryFile(prefix="momentlink-photo-", suffix=".jpg", delete=False)
@@ -294,7 +299,7 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
     temp.close()
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60, connect=15)) as client:
-            async with client.stream("GET", drive_download_url(finished.storage_object_id)) as upstream:
+            async with client.stream("GET", drive_download_url(download_variant.storage_object_id)) as upstream:
                 if upstream.status_code >= 400:
                     raise HTTPException(502, f"File storage returned HTTP {upstream.status_code}")
                 with open(download_path, "wb") as output:
@@ -367,15 +372,15 @@ async def download_selected_photos(
     variants = db.query(PhotoVariant).filter(
         PhotoVariant.photo_id.in_(selected_ids),
         PhotoVariant.photo_id.in_(db.query(Photo.id).filter(Photo.event_id == event.id)),
-        PhotoVariant.kind == "finished",
+        PhotoVariant.kind.in_(["finished", "preview", "thumbnail"]),
     ).all()
-    variants_by_photo = {variant.photo_id: variant for variant in variants}
-    if any(
-        photo_id not in variants_by_photo
-        or variants_by_photo[photo_id].storage_provider != "google_drive"
-        or not variants_by_photo[photo_id].storage_object_id
-        for photo_id in selected_ids
-    ):
+    variants_by_photo: dict[str, PhotoVariant] = {}
+    for variant in variants:
+        current = variants_by_photo.get(variant.photo_id)
+        priority = {"finished": 0, "preview": 1, "thumbnail": 2}
+        if current is None or priority[variant.kind] < priority[current.kind]:
+            variants_by_photo[variant.photo_id] = variant
+    if any(photo_id not in variants_by_photo for photo_id in selected_ids):
         raise HTTPException(404, "One or more selected photos are not available for download")
 
     temp = tempfile.NamedTemporaryFile(prefix="momentlink-", suffix=".zip", delete=False)

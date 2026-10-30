@@ -62,17 +62,10 @@ async function getJson(url) {
   return r.json();
 }
 
-function startNativeDownload(url, filename) {
-  const link = document.createElement("a");
-  link.href = new URL(url, API).toString();
-  if (filename) link.download = filename;
-  // Let the browser handle the attachment response. Fetching a blob and then
-  // clicking a synthetic link is blocked by several mobile browsers.
-  link.target = "_blank";
-  link.rel = "noopener";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
+function startNativeDownload(url) {
+  // Navigate directly to the attachment URL so mobile browsers use their
+  // native download manager instead of blocking a scripted blob/new tab.
+  window.location.assign(new URL(url, API).toString());
 }
 
 // -------------------------------------------------------------------------
@@ -251,7 +244,7 @@ function downloadAllPhotos() {
   }
   const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
   showToast("กำลังเตรียมไฟล์รูปภาพ...", "info");
-  startNativeDownload(url.toString(), `${galleryMeta.eventName.replace(/\s+/g, "_")}_photos.zip`);
+  startNativeDownload(url.toString());
 }
 
 async function reportIssue() {
@@ -321,7 +314,7 @@ async function loadPhotos(reset = false) {
     for (const photo of newPhotos) {
       const thumb = photo.variants?.find(v => v.kind === "thumbnail")?.url || "";
       const preview = photo.variants?.find(v => v.kind === "preview")?.url || thumb;
-      const finished = photo.variants?.find(v => v.kind === "finished")?.url || preview;
+      const finished = photo.variants?.find(v => v.kind === "finished")?.url || "";
       const isRecent = (Date.now() - sessionStartTime < 300000) || !isInitial;
 
       const galleryPhoto = { 
@@ -330,6 +323,7 @@ async function loadPhotos(reset = false) {
         thumb, 
         preview, 
         finished,
+        download: `/api/gallery/${publicId}/photos/${photo.id}/download`,
         isRecent
       };
 
@@ -362,7 +356,7 @@ function createPhotoCard(photo) {
   card.innerHTML = `
     ${photo.isRecent ? `<span class="photo-badge-new">NEW</span>` : ""}
     <img src="${photo.thumb || photo.preview}" alt="${safeName}" loading="lazy">
-    <button class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" onclick="event.stopPropagation(); triggerFileDownload('${photo.finished}', '${photo.filename}')">
+    <button class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" onclick="event.stopPropagation(); triggerFileDownload('${photo.download}', '${photo.filename}')">
       ↓
     </button>
     <div class="photo-select-mark" aria-hidden="true">✓</div>
@@ -467,7 +461,7 @@ function downloadSelectedPhotos() {
 
   if (photos.length === 1) {
     const photo = galleryPhotos.find(item => item.id === photos[0]);
-    if (photo) triggerFileDownload(photo.finished, photo.filename);
+    if (photo) triggerFileDownload(photo.download, photo.filename);
     return;
   }
 
@@ -479,11 +473,11 @@ function downloadSelectedPhotos() {
   showToast(`กำลังเตรียมไฟล์ ZIP ${photos.length} รูป...`, "info");
   const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
   photos.forEach(id => url.searchParams.append("photo_id", id));
-  startNativeDownload(url.toString(), `${galleryMeta.eventName.replace(/\s+/g, "_")}_photos.zip`);
+  startNativeDownload(url.toString());
 }
 
 function triggerFileDownload(url, filename) {
-  startNativeDownload(url, filename || "csbxxm-photo.jpg");
+  startNativeDownload(url);
   showToast("เริ่มดาวน์โหลดแล้ว ตรวจสอบโฟลเดอร์ดาวน์โหลดของมือถือ", "success");
 }
 
@@ -518,7 +512,7 @@ function openLightbox(index) {
       </div>
 
       <div class="lightbox-actions">
-        <button class="btn btn-primary" onclick="triggerFileDownload('${photo.finished}', '${photo.filename}')">
+    <button class="btn btn-primary" onclick="triggerFileDownload('${photo.download}', '${photo.filename}')">
           <span class="btn-icon">↓</span> บันทึกรูปภาพนี้
         </button>
         <button class="btn btn-secondary" onclick="sharePhotoNative(${index})">

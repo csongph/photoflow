@@ -230,9 +230,14 @@ def download_photo(public_id: str, photo_id: str, request: Request, response: Re
     photo = db.get(Photo, photo_id)
     if not photo or photo.event_id != event.id or not photo.published or photo.hidden:
         raise HTTPException(404, "Photo not found")
-    if not photo.finished_path:
+    # A few legacy or partially synced photos may only have a preview. Keep
+    # their download button useful by returning the best available image.
+    path = next(
+        (Path(candidate) for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path) if candidate),
+        None,
+    )
+    if not path:
         raise HTTPException(404, "Download file not found")
-    path = Path(photo.finished_path)
     if not path.exists() or not path.is_file():
         raise HTTPException(404, "Download file not found")
     return FileResponse(path, filename=path.name, media_type="image/jpeg")
@@ -284,9 +289,12 @@ def download_photos_zip(
         with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zipped:
             used_names: set[str] = set()
             for photo in photos:
-                if not photo.finished_path:
+                path = next(
+                    (Path(candidate) for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path) if candidate),
+                    None,
+                )
+                if not path:
                     continue
-                path = Path(photo.finished_path)
                 if not path.is_file():
                     continue
                 name = path.name
