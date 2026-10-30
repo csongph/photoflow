@@ -45,6 +45,13 @@ const checkLabels = {
   public_gallery_url: "ลิงก์แกลเลอรี่",
   google_drive: "Google Drive"
 };
+const photoboothThemes = {
+  halloween: {
+    label: "ฮาโลวีน · Pumpkin Night",
+    portrait: "/frames/halloween-portrait.png?v=2",
+    landscape: "/frames/halloween-landscape.png?v=2"
+  }
+};
 
 function nav(active) {
   return `<aside class="nav">
@@ -194,7 +201,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">Photo booth</p><h2>ออกแบบกรอบและธีม</h2><p class="muted">อัปโหลดกรอบ PNG โปร่งใส แล้วทดลองดูบนภาพตัวอย่างก่อนใช้จริง ระบบเลือกกรอบแนวนอนหรือแนวตั้งให้ตรงกับรูปโดยอัตโนมัติและเก็บภาพต้นฉบับไว้</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>กรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><label><span>กรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างธีม</b><p class="muted">เมื่อเลือกไฟล์กรอบ จะแสดงตัวอย่างซ้อนบนภาพจำลองที่นี่</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">PHOTO BOOTH THEME LIBRARY</p><h2>เลือกกรอบและธีม</h2><p class="muted">เลือกธีมที่เตรียมไว้หรืออัปโหลดกรอบ PNG ของคุณเอง แล้วทดลองจัดวางกับรูปก่อนสร้างงาน</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>คลังกรอบเทศกาล</span><select id="frameTheme"><option value="">เลือกกรอบที่เตรียมไว้</option><option value="halloween">ฮาโลวีน · Pumpkin Night</option></select></label><label><span>หรืออัปโหลดกรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><label><span>หรืออัปโหลดกรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreview" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างธีม</b><p class="muted">เมื่อเลือกไฟล์กรอบ จะแสดงตัวอย่างซ้อนบนภาพจำลองที่นี่</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -205,17 +212,24 @@ async function loadEvents() {
   $("#eventForm").addEventListener("submit", createEvent);
   $("#photoboothFrameLandscape").addEventListener("change", previewPhotoboothFrame);
   $("#photoboothFramePortrait").addEventListener("change", previewPhotoboothFrame);
+  $("#frameTheme").addEventListener("change", selectPhotoboothTheme);
+  $("#framePreviewPhoto").addEventListener("change", previewFramePhoto);
+  ["frameScale", "frameOffsetX", "frameOffsetY"].forEach(id => $("#" + id).addEventListener("input", updateFramePreviewTransform));
   renderEvents();
 }
 
 function previewPhotoboothFrame(ev) {
   const file = ev.target.files?.[0];
+  $("#frameTheme").value = "";
+  window.activeFrameThemeFiles = null;
+  if (file) $("[name=photobooth_frame_enabled]").checked = true;
   const preview = $("#frameOverlayPreview");
   const previewKey = "__frameOverlayPreviewUrl";
   if (window[previewKey]) URL.revokeObjectURL(window[previewKey]);
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
+    updateFramePreviewTransform();
     return;
   }
   if (file.type !== "image/png" || !file.name.toLowerCase().endsWith(".png")) {
@@ -227,7 +241,80 @@ function previewPhotoboothFrame(ev) {
   window[previewKey] = URL.createObjectURL(file);
   preview.src = window[previewKey];
   preview.hidden = false;
-  $("#frameSample").classList.add("has-frame");
+  updateFramePreviewTransform();
+}
+
+async function selectPhotoboothTheme(ev) {
+  const theme = photoboothThemes[ev.target.value];
+  window.activeFrameThemeFiles = null;
+  if (!theme) {
+    if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
+    window.__frameOverlayPreviewUrl = null;
+    const preview = $("#frameOverlayPreview");
+    preview.removeAttribute("src");
+    preview.hidden = true;
+    $("[name=photobooth_frame_enabled]").checked = Boolean($("#photoboothFrameLandscape").files.length || $("#photoboothFramePortrait").files.length);
+    return;
+  }
+  try {
+    $("#photoboothFrameLandscape").value = "";
+    $("#photoboothFramePortrait").value = "";
+    const files = {};
+    for (const orientation of ["landscape", "portrait"]) {
+      const response = await fetch(theme[orientation]);
+      if (!response.ok) throw new Error("โหลดไฟล์กรอบไม่สำเร็จ");
+      const blob = await response.blob();
+      files[orientation] = new File([blob], `${ev.target.value}-${orientation}.png`, { type: "image/png" });
+    }
+    window.activeFrameThemeFiles = files;
+    $("[name=photobooth_frame_enabled]").checked = true;
+    const sample = $("#frameSample");
+    const [width, height] = sample.style.aspectRatio.split("/").map(Number);
+    const orientation = width && height && width >= height ? "landscape" : "portrait";
+    const preview = $("#frameOverlayPreview");
+    if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
+    window.__frameOverlayPreviewUrl = URL.createObjectURL(files[orientation]);
+    preview.src = window.__frameOverlayPreviewUrl;
+    preview.hidden = false;
+    updateFramePreviewTransform();
+  } catch (err) {
+    ev.target.value = "";
+    showToast(err.message || "โหลดชุดกรอบไม่สำเร็จ", "error");
+  }
+}
+
+function previewFramePhoto(ev) {
+  const file = ev.target.files?.[0];
+  const preview = $("#framePhotoPreview");
+  if (window.__framePhotoPreviewUrl) URL.revokeObjectURL(window.__framePhotoPreviewUrl);
+  if (!file) {
+    preview.hidden = true;
+    preview.removeAttribute("src");
+    return;
+  }
+  window.__framePhotoPreviewUrl = URL.createObjectURL(file);
+  preview.onload = () => {
+    $("#frameSample").style.aspectRatio = `${preview.naturalWidth} / ${preview.naturalHeight}`;
+    const theme = window.activeFrameThemeFiles;
+    if (theme) {
+      const orientation = preview.naturalWidth >= preview.naturalHeight ? "landscape" : "portrait";
+      if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
+      window.__frameOverlayPreviewUrl = URL.createObjectURL(theme[orientation]);
+      $("#frameOverlayPreview").src = window.__frameOverlayPreviewUrl;
+    }
+  };
+  preview.src = window.__framePhotoPreviewUrl;
+  preview.hidden = false;
+}
+
+function updateFramePreviewTransform() {
+  const scale = Number($("#frameScale").value) / 100;
+  const x = Number($("#frameOffsetX").value);
+  const y = Number($("#frameOffsetY").value);
+  $("#frameScaleValue").value = `${Math.round(scale * 100)}%`;
+  $("#frameXValue").value = `${x}%`;
+  $("#frameYValue").value = `${y}%`;
+  $("#frameOverlayPreview").style.transform = `translate(${x}%, ${y}%) scale(${scale})`;
 }
 
 async function uploadPhotoboothFrame(eventId, file, orientation) {
@@ -286,10 +373,13 @@ async function createEvent(ev) {
   ev.preventDefault();
   const f = new FormData(ev.target);
   const checked = (k) => f.get(k) === "on";
-  const frameFiles = [
+  let frameFiles = [
     ["landscape", f.get("photobooth_frame_landscape")],
     ["portrait", f.get("photobooth_frame_portrait")],
   ].filter(([, file]) => file instanceof File && file.size);
+  if (!frameFiles.length && window.activeFrameThemeFiles) {
+    frameFiles = Object.entries(window.activeFrameThemeFiles);
+  }
   const frameEnabled = checked("photobooth_frame_enabled");
   if (frameEnabled && !frameFiles.length) {
     alert("เลือกกรอบ PNG แนวนอนหรือแนวตั้งอย่างน้อยหนึ่งไฟล์ หรือเอาเครื่องหมายใช้กรอบออก");
@@ -297,7 +387,7 @@ async function createEvent(ev) {
   }
   const payload = {
     name: f.get("name"), description: f.get("description"), event_date: f.get("event_date"),
-    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "Photo Booth Experience by CS.BXXM STUDIO", report_contact: f.get("report_contact") || "" }),
+    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "Photo Booth Experience by CS.BXXM STUDIO", report_contact: f.get("report_contact") || "", photobooth_frame_scale: Number(f.get("frameScale")) / 100, photobooth_frame_x: Number(f.get("frameOffsetX")) / 100, photobooth_frame_y: Number(f.get("frameOffsetY")) / 100 }),
     drive: { upload_finished_photos: checked("upload_finished_photos"), upload_originals: checked("upload_originals") }
   };
   const event = await api("/api/events", { method: "POST", body: JSON.stringify(payload) });

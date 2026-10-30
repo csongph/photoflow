@@ -62,14 +62,25 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
         raise RuntimeError(f"Photobooth {orientation} frame is enabled but no compatible PNG is available")
     with Image.open(frame_path) as source:
         frame = source.convert("RGBA")
-    # Preserve the frame artwork proportions. Separate landscape and portrait
-    # assets are preferred; if one is reused, transparent letterboxing avoids
-    # cropping or distorting its design.
+    # Keep the PNG's proportions, then allow small framing adjustments so its
+    # transparent opening can be aligned with the subject in the photograph.
     frame = ImageOps.contain(frame, img.size, method=Image.Resampling.LANCZOS)
-    if frame.size != img.size:
-        canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
-        canvas.alpha_composite(frame, ((img.width - frame.width) // 2, (img.height - frame.height) // 2))
-        frame = canvas
+    try:
+        scale = min(1.35, max(0.7, float(gallery.get("photobooth_frame_scale", 1))))
+        offset_x = min(0.15, max(-0.15, float(gallery.get("photobooth_frame_x", 0))))
+        offset_y = min(0.15, max(-0.15, float(gallery.get("photobooth_frame_y", 0))))
+    except (TypeError, ValueError):
+        scale, offset_x, offset_y = 1, 0, 0
+    frame = frame.resize((max(1, round(frame.width * scale)), max(1, round(frame.height * scale))), Image.Resampling.LANCZOS)
+    canvas = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    x = (img.width - frame.width) // 2 + round(img.width * offset_x)
+    y = (img.height - frame.height) // 2 + round(img.height * offset_y)
+    left, top = max(0, x), max(0, y)
+    right, bottom = min(img.width, x + frame.width), min(img.height, y + frame.height)
+    if right > left and bottom > top:
+        visible = frame.crop((left - x, top - y, right - x, bottom - y))
+        canvas.alpha_composite(visible, (left, top))
+    frame = canvas
     return Image.alpha_composite(img.convert("RGBA"), frame).convert("RGB")
 
 

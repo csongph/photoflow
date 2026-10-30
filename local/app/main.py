@@ -92,6 +92,8 @@ app.mount("/static", StaticFiles(directory=settings.frontend_dir), name="static"
 gallery_dir = settings.frontend_dir.parent.parent / "gallery"
 app.mount("/css", StaticFiles(directory=gallery_dir / "css"), name="gallery-css")
 app.mount("/js", StaticFiles(directory=gallery_dir / "js"), name="gallery-js")
+frames_dir = settings.frontend_dir.parent.parent / "assets" / "frames"
+app.mount("/frames", StaticFiles(directory=frames_dir), name="photobooth-frames")
 
 
 @app.get("/")

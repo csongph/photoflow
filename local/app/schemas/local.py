@@ -13,6 +13,9 @@ class GallerySettings(BaseModel):
     credit_text: str = "Photo Booth Experience by CS.BXXM STUDIO"
     report_contact: str = ""
     photobooth_frame_enabled: bool = False
+    photobooth_frame_scale: float = 1.0
+    photobooth_frame_x: float = 0.0
+    photobooth_frame_y: float = 0.0
 
 
 class DriveSettings(BaseModel):
