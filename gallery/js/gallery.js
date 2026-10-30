@@ -62,15 +62,17 @@ async function getJson(url) {
   return r.json();
 }
 
-async function fetchDownload(url, filename) {
-  const response = await fetch(url, { credentials: "include" });
-  if (!response.ok) throw new Error("ดาวน์โหลดไม่สำเร็จ");
-  const objectUrl = URL.createObjectURL(await response.blob());
+function startNativeDownload(url, filename) {
   const link = document.createElement("a");
-  link.href = objectUrl;
-  link.download = filename;
+  link.href = new URL(url, API).toString();
+  if (filename) link.download = filename;
+  // Let the browser handle the attachment response. Fetching a blob and then
+  // clicking a synthetic link is blocked by several mobile browsers.
+  link.target = "_blank";
+  link.rel = "noopener";
+  document.body.appendChild(link);
   link.click();
-  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+  link.remove();
 }
 
 // -------------------------------------------------------------------------
@@ -242,24 +244,14 @@ async function shareGalleryNative() {
   }
 }
 
-async function copyDownloadLinks() {
-  try {
-    const data = await getJson(`${API}/api/gallery/${publicId}/downloads`);
-    if (!data.links || !data.links.length) {
-      showToast("ยังไม่มีรูปให้ดาวน์โหลด", "info");
-      return;
-    }
-    if (data.links.length > 40) {
-      showToast("สามารถดาวน์โหลดพร้อมกันได้สูงสุดครั้งละ 40 รูป กรุณาเลือกเฉพาะรูปที่ต้องการ", "info");
-      toggleSelectionMode();
-      return;
-    }
-    showToast(`กำลังเริ่มดาวน์โหลด ${data.links.length} รูป...`, "success");
-    await Promise.all(data.links.map(item => fetchDownload(new URL(item.url, API).toString(), item.filename)));
-  } catch (err) {
-    console.error(err);
-    showToast("เกิดข้อผิดพลาดในการดาวน์โหลด", "error");
+function downloadAllPhotos() {
+  if (!knownPhotoCount) {
+    showToast("ยังไม่มีรูปให้ดาวน์โหลด", "info");
+    return;
   }
+  const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
+  showToast("กำลังเตรียมไฟล์รูปภาพ...", "info");
+  startNativeDownload(url.toString(), `${galleryMeta.eventName.replace(/\s+/g, "_")}_photos.zip`);
 }
 
 async function reportIssue() {
@@ -485,32 +477,14 @@ function downloadSelectedPhotos() {
   }
 
   showToast(`กำลังเตรียมไฟล์ ZIP ${photos.length} รูป...`, "info");
-  const url = new URL(`${API}/api/gallery/${publicId}/downloads.zip`);
+  const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
   photos.forEach(id => url.searchParams.append("photo_id", id));
-
-  fetch(url, { credentials: "include" })
-    .then(async response => {
-      if (!response.ok) throw new Error("ดาวน์โหลดไม่สำเร็จ");
-      const blob = await response.blob();
-      const link = document.createElement("a");
-      const objectUrl = URL.createObjectURL(blob);
-      link.href = objectUrl;
-      link.download = `${galleryMeta.eventName.replace(/\s+/g, "_")}_photos.zip`;
-      link.click();
-      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
-      showToast("ดาวน์โหลดไฟล์ ZIP เรียบร้อยแล้ว", "success");
-    })
-    .catch(err => {
-      console.error(err);
-      showToast("ดาวน์โหลดไฟล์ ZIP ไม่สำเร็จ", "error");
-    });
+  startNativeDownload(url.toString(), `${galleryMeta.eventName.replace(/\s+/g, "_")}_photos.zip`);
 }
 
 function triggerFileDownload(url, filename) {
-  showToast("กำลังดาวน์โหลดรูปภาพ...", "info");
-  fetchDownload(url, filename || "csbxxm-photo.jpg")
-    .then(() => showToast("บันทึกรูปภาพเรียบร้อยแล้ว", "success"))
-    .catch(err => showToast(err.message || "เกิดข้อผิดพลาดในการดาวน์โหลด", "error"));
+  startNativeDownload(url, filename || "csbxxm-photo.jpg");
+  showToast("เริ่มดาวน์โหลดแล้ว ตรวจสอบโฟลเดอร์ดาวน์โหลดของมือถือ", "success");
 }
 
 // -------------------------------------------------------------------------

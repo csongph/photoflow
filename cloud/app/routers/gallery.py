@@ -332,12 +332,12 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
 async def download_selected_photos(
     public_id: str,
     request: Request,
-    photo_id: list[str] = Query(...),
+    photo_id: list[str] = Query(default=[]),
     db: Session = Depends(get_db),
 ):
     selected_ids = list(dict.fromkeys(photo_id))
-    if not selected_ids or len(selected_ids) > 40:
-        raise HTTPException(400, "Select between 1 and 40 photos")
+    if len(selected_ids) > 40:
+        raise HTTPException(400, "Select no more than 40 photos")
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
@@ -349,15 +349,21 @@ async def download_selected_photos(
     if settings and not settings.allow_download:
         raise HTTPException(403, "Downloads are disabled")
 
-    rows = db.query(Photo).filter(
+    query = db.query(Photo).filter(
         Photo.event_id == event.id,
-        Photo.id.in_(selected_ids),
         Photo.published == True,
         Photo.hidden == False,
-    ).all()
-    photos_by_id = {photo.id: photo for photo in rows}
-    if len(photos_by_id) != len(selected_ids):
+    )
+    if selected_ids:
+        query = query.filter(Photo.id.in_(selected_ids))
+    rows = query.order_by(Photo.created_at.desc()).all()
+    if not rows:
+        raise HTTPException(404, "No photos are available for download")
+    if selected_ids and len(rows) != len(selected_ids):
         raise HTTPException(404, "One or more selected photos are unavailable")
+    if not selected_ids:
+        selected_ids = [photo.id for photo in rows]
+    photos_by_id = {photo.id: photo for photo in rows}
     variants = db.query(PhotoVariant).filter(
         PhotoVariant.photo_id.in_(selected_ids),
         PhotoVariant.photo_id.in_(db.query(Photo.id).filter(Photo.event_id == event.id)),
