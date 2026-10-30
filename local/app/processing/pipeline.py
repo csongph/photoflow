@@ -25,7 +25,15 @@ def open_source_image(path: Path) -> Image.Image:
             raise UnsupportedRawError(f"Unsupported RAW file: {exc}") from exc
     if path.suffix.lower() not in IMAGE_EXTENSIONS:
         raise UnsupportedRawError("Unsupported file type")
-    return Image.open(path).convert("RGB")
+    with Image.open(path) as source:
+        rgba = source.convert("RGBA")
+    if rgba.getchannel("A").getextrema()[0] < 255:
+        # Flatten transparent cutouts before dropping alpha. PNG editors often
+        # keep a checkerboard preview in the hidden RGB pixels; converting
+        # straight to RGB would expose that checkerboard in the final photo.
+        background = Image.new("RGBA", rgba.size, (0, 0, 0, 255))
+        return Image.alpha_composite(background, rgba).convert("RGB")
+    return rgba.convert("RGB")
 
 
 def fit_long_edge(img: Image.Image, long_edge: int) -> Image.Image:
