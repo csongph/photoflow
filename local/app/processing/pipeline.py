@@ -70,9 +70,10 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
         raise RuntimeError(f"Photobooth {orientation} frame is enabled but no compatible PNG is available")
     with Image.open(frame_path) as source:
         frame = source.convert("RGBA")
-    # Keep the PNG's proportions, then allow small framing adjustments so its
-    # transparent opening can be aligned with the subject in the photograph.
-    frame = ImageOps.contain(frame, img.size, method=Image.Resampling.LANCZOS)
+    # Match the photo canvas exactly so the frame reaches every outer edge.
+    # Frame assets are designed for their matching orientation; a tiny aspect
+    # ratio correction is preferable to leaving uncovered strips around photos.
+    frame = frame.resize(img.size, Image.Resampling.LANCZOS)
     try:
         scale = min(1.35, max(0.7, float(gallery.get("photobooth_frame_scale", 1))))
         offset_x = min(0.15, max(-0.15, float(gallery.get("photobooth_frame_x", 0))))

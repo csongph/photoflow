@@ -48,8 +48,8 @@ const checkLabels = {
 const photoboothThemes = {
   halloween: {
     label: "ฮาโลวีน · Pumpkin Night",
-    portrait: "/frames/halloween-portrait.png?v=2",
-    landscape: "/frames/halloween-landscape.png?v=2"
+    portrait: "/frames/halloween-portrait.png?v=3",
+    landscape: "/frames/halloween-landscape.png?v=3"
   }
 };
 
