@@ -4,18 +4,14 @@ import json
 import hashlib
 import hmac
 import os
-import tempfile
 import time
-import zipfile
 from datetime import timezone
 from threading import Lock
 from pathlib import Path
-from urllib.parse import parse_qs
 
 import qrcode
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import FileResponse
-from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -249,50 +245,6 @@ def download_photo(public_id: str, photo_id: str, request: Request, response: Re
     if not path.exists() or not path.is_file():
         raise HTTPException(404, "Download file not found")
     return FileResponse(path, filename=path.name, media_type="image/jpeg")
-
-
-@router.post("/{public_id}/download.zip")
-async def download_selected_zip(public_id: str, request: Request, db: Session = Depends(get_db)):
-    event = event_by_public_id(db, public_id)
-    if not has_gallery_access(event, request):
-        require_gallery_access(event)
-    if not gallery_settings(event).get("allow_download", True):
-        raise HTTPException(403, "Downloads are disabled")
-    try:
-        form = parse_qs((await request.body()).decode("utf-8"))
-        photo_ids = list(dict.fromkeys(form.get("photo_id", [])))
-    except (UnicodeDecodeError, ValueError):
-        raise HTTPException(400, "Invalid photo selection")
-    if not photo_ids or len(photo_ids) > 10:
-        raise HTTPException(400, "Select between 1 and 10 photos")
-    photos = [db.get(Photo, photo_id) for photo_id in photo_ids]
-    if any(not photo or photo.event_id != event.id or not photo.published or photo.hidden for photo in photos):
-        raise HTTPException(404, "One or more photos are unavailable")
-    zip_file = tempfile.NamedTemporaryFile(prefix="photoflow-gallery-", suffix=".zip", delete=False)
-    zip_path = zip_file.name
-    zip_file.close()
-    try:
-        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-            archive_names: set[str] = set()
-            for photo in photos:
-                path = next((Path(candidate) for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path)
-                             if candidate and Path(candidate).is_file()), None)
-                if not path:
-                    raise HTTPException(404, "A selected photo file is unavailable")
-                archive_name = Path(path.name).name
-                stem, suffix = Path(archive_name).stem, Path(archive_name).suffix
-                duplicate = 2
-                while archive_name in archive_names:
-                    archive_name = f"{stem}-{duplicate}{suffix}"
-                    duplicate += 1
-                archive_names.add(archive_name)
-                archive.write(path, arcname=archive_name)
-    except Exception:
-        if os.path.exists(zip_path):
-            os.unlink(zip_path)
-        raise
-    return FileResponse(zip_path, filename="PhotoFlow-photos.zip", media_type="application/zip",
-                        background=BackgroundTask(os.unlink, zip_path))
 
 
 @router.get("/{public_id}/downloads")
