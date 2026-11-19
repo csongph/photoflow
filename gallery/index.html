@@ -182,7 +182,15 @@
       <h2>ดาวน์โหลดรูปภาพ</h2>
       <p id="downloadFallbackMessage">ไฟล์จะถูกดาวน์โหลดลงโฟลเดอร์ Downloads หรือแอป Files ของอุปกรณ์</p>
       <progress id="downloadFallbackProgress" class="download-fallback-progress" max="100" hidden></progress>
-      <div id="downloadFallbackLinks" class="download-fallback-links"></div>
+      <section id="androidDownloadQueue" class="android-download-queue" hidden>
+        <p id="androidDownloadQueueMessage"></p>
+        <a id="androidDownloadNextLink" class="btn btn-primary download-fallback-link" href="#" onclick="advanceAndroidDownloadQueue(event)"></a>
+        <button id="retryAndroidDownloadBtn" class="btn btn-secondary" type="button" onclick="retryAndroidQueueCurrent()" hidden>ลองเตรียมรูปนี้อีกครั้ง</button>
+      </section>
+      <details id="downloadIndividualDetails" class="download-individual-details">
+        <summary>ดาวน์โหลดรูปแยกเอง</summary>
+        <div id="downloadFallbackLinks" class="download-fallback-links"></div>
+      </details>
     </div>
   </dialog>
   <dialog id="galleryQrDialog" class="gallery-qr-dialog" onclick="if(event.target===this) closeGalleryQrDialog()">
@@ -200,7 +208,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261119-csbxxm-26"></script>
+  <script src="/js/gallery.js?v=20261119-csbxxm-28"></script>
   <script>initGallery()</script>
 </body>
 </html>

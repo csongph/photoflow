@@ -39,6 +39,7 @@ const preparingPhotoIds = new Set();
 const failedPreparationIds = new Set();
 const preparationControllers = new Map();
 let fallbackObjectUrls = [];
+let androidDownloadQueue = null;
 const MAX_SHARE_SELECTION = 10;
 let publicSlideshowState = null;
 let sessionStartTime = Date.now();
@@ -81,6 +82,10 @@ function freshDownloadUrl(url) {
 
 function isAppleMobileDevice() {
   return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
+function isAndroidDevice() {
+  return /Android/i.test(navigator.userAgent);
 }
 
 // -------------------------------------------------------------------------
@@ -795,6 +800,10 @@ function downloadSelectedPhotos(event) {
   event.preventDefault();
   const photos = [...selectedPhotoIds];
   if (!photos.length) return;
+  if (isAndroidDevice()) {
+    startAndroidDownloadQueue(photos);
+    return;
+  }
   if (!isAppleMobileDevice()) {
     showDownloadFallback(photos, true);
     return;
@@ -823,6 +832,139 @@ function downloadSelectedPhotos(event) {
   showDownloadFallback(photos, true);
 }
 
+function startAndroidDownloadQueue(photoIds) {
+  showDownloadFallback(photoIds, false, true);
+  const panel = document.querySelector("#androidDownloadQueue");
+  const progress = document.querySelector("#downloadFallbackProgress");
+  const details = document.querySelector("#downloadIndividualDetails");
+  if (!panel) return;
+  androidDownloadQueue = {
+    photos: photoIds.map(id => galleryPhotos.find(photo => photo.id === id)).filter(Boolean),
+    index: 0,
+    status: "preparing",
+    objectUrl: "",
+    controller: null
+  };
+  panel.hidden = false;
+  if (progress) progress.hidden = true;
+  if (details) details.open = false;
+  const fallbackMessage = document.querySelector("#downloadFallbackMessage");
+  if (fallbackMessage) fallbackMessage.textContent = "Android จะดาวน์โหลดทีละรูปไปยัง Downloads แตะปุ่มรูปถัดไปได้ต่อเนื่องโดยไม่ต้องรีเฟรชหน้า";
+  prepareAndroidQueueCurrent();
+}
+
+async function prepareAndroidQueueCurrent() {
+  const queue = androidDownloadQueue;
+  const progress = document.querySelector("#downloadFallbackProgress");
+  const link = document.querySelector("#androidDownloadNextLink");
+  const retry = document.querySelector("#retryAndroidDownloadBtn");
+  if (!queue || queue.index >= queue.photos.length) return updateAndroidDownloadQueue();
+  const photo = queue.photos[queue.index];
+  queue.status = "preparing";
+  queue.controller?.abort();
+  const controller = new AbortController();
+  queue.controller = controller;
+  let timedOut = false;
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, 60000);
+  if (progress) progress.hidden = false;
+  if (link) link.hidden = true;
+  if (retry) retry.hidden = true;
+  updateAndroidDownloadQueue();
+  try {
+    const response = await fetch(freshDownloadUrl(photo.download), {
+      credentials: "include", cache: "no-store", signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`เซิร์ฟเวอร์ส่งสถานะ ${response.status}`);
+    const contentLength = Number(response.headers.get("content-length") || 0);
+    if (contentLength > 40 * 1024 * 1024) throw new Error("รูปมีขนาดเกิน 40 MB");
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/") || !blob.size || blob.size > 40 * 1024 * 1024) {
+      throw new Error("ไฟล์ไม่ใช่รูปภาพหรือมีขนาดเกิน 40 MB");
+    }
+    if (androidDownloadQueue !== queue || controller.signal.aborted) return;
+    queue.objectUrl = URL.createObjectURL(blob);
+    fallbackObjectUrls.push(queue.objectUrl);
+    queue.status = "ready";
+  } catch (error) {
+    if (androidDownloadQueue !== queue || (error.name === "AbortError" && !timedOut) || queue.controller !== controller) return;
+    console.error("Unable to prepare Android download", photo.id, error);
+    queue.status = "error";
+    queue.error = timedOut ? "เซิร์ฟเวอร์ตอบช้าเกิน 60 วินาที" : error.message || "เตรียมรูปไม่สำเร็จ";
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (queue.controller === controller) queue.controller = null;
+  }
+  updateAndroidDownloadQueue();
+}
+
+function updateAndroidDownloadQueue() {
+  const queue = androidDownloadQueue;
+  const status = document.querySelector("#androidDownloadQueueMessage");
+  const link = document.querySelector("#androidDownloadNextLink");
+  const retry = document.querySelector("#retryAndroidDownloadBtn");
+  const progress = document.querySelector("#downloadFallbackProgress");
+  if (!queue || !status || !link) return;
+  if (queue.index >= queue.photos.length) {
+    status.textContent = `ส่งคำขอดาวน์โหลดครบ ${queue.photos.length} รูปแล้ว ตรวจสอบรายการดาวน์โหลดใน Chrome`;
+    link.hidden = true;
+    if (retry) retry.hidden = true;
+    if (progress) progress.hidden = true;
+    return;
+  }
+  const photo = queue.photos[queue.index];
+  if (queue.status === "preparing") {
+    status.textContent = `กำลังตรวจและเตรียมรูป ${queue.index + 1} จาก ${queue.photos.length}…`;
+    link.hidden = true;
+    if (retry) retry.hidden = true;
+    if (progress) progress.hidden = false;
+    return;
+  }
+  if (queue.status === "error") {
+    status.textContent = `เตรียม ${photo.filename} ไม่สำเร็จ (${queue.error}) ตรวจอินเทอร์เน็ตแล้วลองใหม่ได้`;
+    link.hidden = true;
+    if (retry) retry.hidden = false;
+    if (progress) progress.hidden = true;
+    return;
+  }
+  status.textContent = `รูป ${queue.index + 1} จาก ${queue.photos.length} พร้อมแล้ว · แตะบันทึกเพื่อไปต่อ`;
+  if (retry) retry.hidden = true;
+  if (progress) progress.hidden = true;
+  link.href = queue.objectUrl;
+  link.download = photo.filename;
+  link.textContent = `↓ บันทึก ${photo.filename}`;
+  link.hidden = false;
+}
+
+function advanceAndroidDownloadQueue(event) {
+  const queue = androidDownloadQueue;
+  if (!queue || !event.isTrusted || queue.status !== "ready") {
+    event.preventDefault();
+    return;
+  }
+  const downloadedUrl = queue.objectUrl;
+  queue.objectUrl = "";
+  fallbackObjectUrls = fallbackObjectUrls.filter(url => url !== downloadedUrl);
+  queue.status = "sent";
+  const status = document.querySelector("#androidDownloadQueueMessage");
+  if (status) status.textContent = `ส่งคำขอรูป ${queue.index + 1} จาก ${queue.photos.length} ไปยัง Chrome แล้ว กำลังเตรียมรูปถัดไป…`;
+  window.setTimeout(() => {
+    if (androidDownloadQueue !== queue) return;
+    queue.index += 1;
+    queue.status = "preparing";
+    prepareAndroidQueueCurrent();
+  }, 450);
+  window.setTimeout(() => {
+    if (downloadedUrl) URL.revokeObjectURL(downloadedUrl);
+  }, 30000);
+}
+
+function retryAndroidQueueCurrent() {
+  if (androidDownloadQueue?.status === "error") prepareAndroidQueueCurrent();
+}
+
 function showDownloadFallback(photoIds, startDownloads = false, silent = false) {
   const dialog = document.querySelector("#downloadFallbackDialog");
   const list = document.querySelector("#downloadFallbackLinks");
@@ -839,12 +981,20 @@ function showDownloadFallback(photoIds, startDownloads = false, silent = false) 
     const href = preparedUrl || freshDownloadUrl(photo.download);
     return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
   }).join("");
+  list.querySelectorAll("a").forEach((link, index) => {
+    const photo = galleryPhotos.find(item => item.id === availableIds[index]);
+    if (photo) link.addEventListener("click", event => {
+      if (event.isTrusted) link.href = freshDownloadUrl(photo.download);
+    });
+  });
   const message = document.querySelector("#downloadFallbackMessage");
   const progress = document.querySelector("#downloadFallbackProgress");
+  const details = document.querySelector("#downloadIndividualDetails");
   if (message) message.textContent = startDownloads
     ? `กำลังเริ่มดาวน์โหลดรูปแยก ${availableIds.length} ไฟล์ หาก Chrome ถาม ให้กดอนุญาตดาวน์โหลดหลายไฟล์ แล้วตรวจรายการดาวน์โหลดของเบราว์เซอร์`
     : "แตะชื่อไฟล์ด้านล่างเพื่อดาวน์โหลด ระบบจะบันทึกผ่านเบราว์เซอร์ไปยัง Downloads หรือ Files";
   if (progress) progress.hidden = !startDownloads;
+  if (startDownloads && details) details.open = true;
   if (startDownloads) {
     // Trigger every file in the original user gesture so browsers can show
     // their native permission prompt for multiple downloads.
@@ -859,8 +1009,10 @@ function showDownloadFallback(photoIds, startDownloads = false, silent = false) 
 }
 
 document.querySelector("#downloadFallbackDialog")?.addEventListener("close", () => {
+  androidDownloadQueue?.controller?.abort();
   fallbackObjectUrls.forEach(url => URL.revokeObjectURL(url));
   fallbackObjectUrls = [];
+  androidDownloadQueue = null;
 });
 
 // -------------------------------------------------------------------------
