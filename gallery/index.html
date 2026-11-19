@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-24">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-25">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -178,11 +178,14 @@
   <dialog id="downloadFallbackDialog" class="download-fallback-dialog">
     <div class="download-fallback-content">
       <button class="btn btn-ghost download-fallback-close" onclick="document.querySelector('#downloadFallbackDialog').close()">ปิด ✕</button>
+      <span class="download-fallback-kicker">บันทึกรูปที่เลือก</span>
       <h2>ดาวน์โหลดรูปภาพ</h2>
       <p id="downloadFallbackMessage">ไฟล์จะถูกดาวน์โหลดลงโฟลเดอร์ Downloads หรือแอป Files ของอุปกรณ์</p>
+      <progress id="downloadFallbackProgress" class="download-fallback-progress" max="100" hidden></progress>
       <div id="downloadFallbackLinks" class="download-fallback-links"></div>
     </div>
   </dialog>
+  <iframe name="photoflow-download-target" title="ดาวน์โหลดไฟล์รูปภาพ" class="download-target-frame" hidden></iframe>
 
   <dialog id="galleryQrDialog" class="gallery-qr-dialog" onclick="if(event.target===this) closeGalleryQrDialog()">
     <div class="gallery-qr-dialog-content">
@@ -199,7 +202,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261119-csbxxm-23"></script>
+  <script src="/js/gallery.js?v=20261119-csbxxm-24"></script>
   <script>initGallery()</script>
 </body>
 </html>

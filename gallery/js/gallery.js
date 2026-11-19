@@ -796,7 +796,7 @@ function downloadSelectedPhotos(event) {
   const photos = [...selectedPhotoIds];
   if (!photos.length) return;
   if (!isAppleMobileDevice()) {
-    showDownloadFallback(photos, true);
+    downloadSelectedZip(photos);
     return;
   }
   if (photos.some(id => !preparedFiles.has(id))) {
@@ -823,7 +823,33 @@ function downloadSelectedPhotos(event) {
   showDownloadFallback(photos, true);
 }
 
-function showDownloadFallback(photoIds, startDownloads = false) {
+function downloadSelectedZip(photoIds) {
+  const dialog = document.querySelector("#downloadFallbackDialog");
+  const message = document.querySelector("#downloadFallbackMessage");
+  const progress = document.querySelector("#downloadFallbackProgress");
+  showDownloadFallback(photoIds, false, true);
+  if (message) message.textContent = `กำลังรวมรูป ${photoIds.length} รูปเป็นไฟล์ ZIP เพื่อดาวน์โหลดครั้งเดียว`;
+  if (progress) progress.hidden = false;
+  const form = document.createElement("form");
+  form.method = "POST";
+  form.action = `${API}/api/gallery/${encodeURIComponent(publicId)}/download.zip`;
+  form.target = "photoflow-download-target";
+  form.hidden = true;
+  photoIds.forEach(id => {
+    const input = document.createElement("input");
+    input.type = "hidden";
+    input.name = "photo_id";
+    input.value = id;
+    form.append(input);
+  });
+  document.body.append(form);
+  form.submit();
+  window.setTimeout(() => form.remove(), 30000);
+  showToast("กำลังสร้างไฟล์ ZIP สำหรับรูปที่เลือก", "info");
+  if (!dialog?.open) dialog?.showModal();
+}
+
+function showDownloadFallback(photoIds, startDownloads = false, silent = false) {
   const dialog = document.querySelector("#downloadFallbackDialog");
   const list = document.querySelector("#downloadFallbackLinks");
   if (!dialog || !list) return;
@@ -839,22 +865,20 @@ function showDownloadFallback(photoIds, startDownloads = false) {
     const href = preparedUrl || freshDownloadUrl(photo.download);
     return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
   }).join("");
-  if (!dialog.open) dialog.showModal();
   const message = document.querySelector("#downloadFallbackMessage");
-  if (message) message.textContent = isAppleMobileDevice()
-    ? "หากส่งหลายรูปไม่สำเร็จ ให้ลองเลือกรูปจำนวนน้อยลงแล้วกดบันทึกอีกครั้ง หากยังไม่ได้ แตะชื่อไฟล์เพื่อดาวน์โหลดแยก"
-    : startDownloads
-      ? "กำลังดาวน์โหลดรูปแยกไฟล์ลงโฟลเดอร์ Downloads หากเบราว์เซอร์ถาม ให้กดยืนยันอนุญาตดาวน์โหลดหลายไฟล์ หากถูกบล็อกให้แตะชื่อไฟล์ทีละรูป"
-      : "แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์ ระบบไม่สามารถยืนยันการบันทึกลงเครื่องแทนเบราว์เซอร์ได้";
+  const progress = document.querySelector("#downloadFallbackProgress");
+  if (message) message.textContent = startDownloads
+    ? `กำลังเริ่มดาวน์โหลด ${availableIds.length} รูปไปยัง Downloads หากเบราว์เซอร์ถาม ให้เลือกอนุญาตดาวน์โหลดหลายไฟล์`
+    : "แตะชื่อไฟล์ด้านล่างเพื่อดาวน์โหลด ระบบจะบันทึกผ่านเบราว์เซอร์ไปยัง Downloads หรือ Files";
+  if (progress) progress.hidden = !startDownloads;
+  if (!dialog.open) dialog.showModal();
   if (startDownloads) {
-    window.setTimeout(() => {
-      if (!dialog.open) return;
-      list.querySelectorAll("a").forEach((link, index) => {
-        window.setTimeout(() => link.click(), index * 700);
-      });
-    }, 150);
-    showToast("กำลังเริ่มดาวน์โหลดรูปแยกไฟล์ หากเบราว์เซอร์บล็อก ให้แตะชื่อรูปในรายการ", "info");
-  } else {
+    // Trigger every file in the original user gesture so browsers can show
+    // their native permission prompt for multiple downloads.
+    list.querySelectorAll("a").forEach(link => link.click());
+    if (message) message.textContent = `ส่งคำขอดาวน์โหลดครบ ${availableIds.length} รูปแล้ว ตรวจสอบโฟลเดอร์ Downloads; หากได้ไม่ครบ อนุญาตการดาวน์โหลดหลายไฟล์หรือแตะชื่อรูปด้านล่าง`;
+    if (!silent) showToast("ส่งคำขอดาวน์โหลดรูปที่เลือกแล้ว", "info");
+  } else if (!silent) {
     showToast("แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์", "info");
   }
 }
