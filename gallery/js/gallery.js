@@ -717,7 +717,7 @@ function togglePhotoSelection(photoId, card) {
     }
     selectedPhotoIds.add(photoId);
     card.classList.add("selected");
-    prepareSelectedPhoto(photoId);
+    if (isAppleMobileDevice()) prepareSelectedPhoto(photoId);
   }
   updateSelectionControls();
 }
@@ -757,7 +757,7 @@ function selectAllPhotos() {
   for (const card of available.slice(0, room)) {
     selectedPhotoIds.add(card.dataset.id);
     card.classList.add("selected");
-    prepareSelectedPhoto(card.dataset.id);
+    if (isAppleMobileDevice()) prepareSelectedPhoto(card.dataset.id);
   }
   if (available.length > room) showToast(`เลือกเพิ่มได้ ${room} รูป · สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง`, "info");
   updateSelectionControls();
@@ -779,13 +779,14 @@ function updateSelectionControls() {
   const ready = [...selectedPhotoIds].filter(id => preparedFiles.has(id)).length;
   const preparing = [...selectedPhotoIds].filter(id => preparingPhotoIds.has(id)).length;
   const failed = [...selectedPhotoIds].filter(id => failedPreparationIds.has(id)).length;
+  const needsPreparedFiles = isAppleMobileDevice();
   const countLabel = document.querySelector("#selectedCount");
   const downloadButton = document.querySelector("#downloadSelectedBtn");
 
   if (countLabel) countLabel.textContent = preparing ? `เตรียมรูป ${ready}/${count}` : `เลือก ${count} รูป`;
   if (downloadButton) {
-    downloadButton.disabled = count === 0 || preparing > 0 || (ready !== count && failed === 0);
-    const readyLabel = `บันทึกรูป ${count} รูป`;
+    downloadButton.disabled = count === 0 || (needsPreparedFiles && (preparing > 0 || (ready !== count && failed === 0)));
+    const readyLabel = needsPreparedFiles ? `บันทึกลง Photos ${count} รูป` : `ดาวน์โหลด ${count} รูป`;
     downloadButton.innerHTML = `<span class="btn-icon">${preparing ? "…" : "↓"}</span> ${preparing ? `เตรียมรูป ${ready}/${count}` : failed ? `ดาวน์โหลดแยก ${count} รูป` : readyLabel}`;
   }
 }
@@ -794,6 +795,10 @@ function downloadSelectedPhotos(event) {
   event.preventDefault();
   const photos = [...selectedPhotoIds];
   if (!photos.length) return;
+  if (!isAppleMobileDevice()) {
+    showDownloadFallback(photos, true);
+    return;
+  }
   if (photos.some(id => !preparedFiles.has(id))) {
     showDownloadFallback(photos);
     return;
@@ -832,14 +837,14 @@ function showDownloadFallback(photoIds, startDownloads = false) {
     const preparedUrl = file ? URL.createObjectURL(file) : "";
     if (preparedUrl) fallbackObjectUrls.push(preparedUrl);
     const href = preparedUrl || freshDownloadUrl(photo.download);
-    return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" target="_blank" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
+    return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
   }).join("");
   if (!dialog.open) dialog.showModal();
   const message = document.querySelector("#downloadFallbackMessage");
   if (message) message.textContent = isAppleMobileDevice()
     ? "หากส่งหลายรูปไม่สำเร็จ ให้ลองเลือกรูปจำนวนน้อยลงแล้วกดบันทึกอีกครั้ง หากยังไม่ได้ แตะชื่อไฟล์เพื่อดาวน์โหลดแยก"
     : startDownloads
-      ? "ระบบจะเริ่มดาวน์โหลดรูปแยกไฟล์ตามที่เบราว์เซอร์อนุญาต หากถูกบล็อก ให้แตะชื่อรูปเพื่อดาวน์โหลดทีละรูป"
+      ? "กำลังดาวน์โหลดรูปแยกไฟล์ลงโฟลเดอร์ Downloads หากเบราว์เซอร์ถาม ให้กดยืนยันอนุญาตดาวน์โหลดหลายไฟล์ หากถูกบล็อกให้แตะชื่อไฟล์ทีละรูป"
       : "แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์ ระบบไม่สามารถยืนยันการบันทึกลงเครื่องแทนเบราว์เซอร์ได้";
   if (startDownloads) {
     window.setTimeout(() => {

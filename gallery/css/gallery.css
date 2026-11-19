@@ -716,6 +716,12 @@ button {
 .floating-gallery-qr-trigger:hover img { box-shadow: 0 0 0 2px var(--accent-primary); }
 
 .gallery-qr-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  max-height: calc(100dvh - 32px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  overflow: auto;
   width: min(390px, calc(100vw - 28px));
   padding: 0;
   border: 1px solid var(--border-medium);
@@ -758,6 +764,11 @@ button {
   background: rgba(255,255,255,.04);
 }
 
+@media (max-height: 560px) {
+  .gallery-qr-dialog-content { gap: 8px; padding: 20px 20px 18px; }
+  .gallery-qr-dialog-content > img { width: min(190px, 48vh); height: min(190px, 48vh); }
+}
+
 .dock-container {
   pointer-events: auto;
   background: var(--bg-glass-heavy);
@@ -767,7 +778,8 @@ button {
   border-radius: var(--radius-pill);
   padding: 6px 10px;
   box-shadow: var(--shadow-lg);
-  max-width: 500px;
+  min-width: 0;
+  max-width: min(500px, 100%);
   width: 100%;
 }
 
@@ -796,6 +808,23 @@ button {
 .selection-dock .dock-btn:disabled {
   opacity: .48;
   cursor: wait;
+}
+
+@media (max-width: 640px) {
+  .floating-dock { padding-inline: max(10px, env(safe-area-inset-left)) max(10px, env(safe-area-inset-right)); }
+  .dock-container { padding: 8px; border-radius: 20px; }
+  .dock-row { min-width: 0; }
+  .selection-dock { justify-content: stretch; }
+  .selection-dock .dock-btn {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 0;
+    max-width: 100%;
+    padding: 10px 8px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+  .selection-dock .selection-pill { flex-basis: 100%; }
 }
 
 .download-fallback-dialog {
