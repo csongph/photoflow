@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-10">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-14">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -69,6 +69,24 @@
         <button id="filterRecent" class="tab-btn" onclick="setPhotoFilter('recent')">
           <span class="tab-sparkle">⚡</span> ล่าสุด <span id="recentCount" class="tab-count" style="display:none">0</span>
         </button>
+      </div>
+
+      <label class="time-filter" for="photoTimeFilter">
+        <span>ช่วงเวลา</span>
+        <select id="photoTimeFilter" onchange="setPhotoTimeFilter(this.value)" aria-label="กรองรูปตามเวลาที่เพิ่มในแกลเลอรี">
+          <option value="all">ทุกช่วงเวลา</option>
+          <option value="15m">15 นาทีล่าสุด</option>
+          <option value="1h">1 ชั่วโมงล่าสุด</option>
+          <option value="3h">3 ชั่วโมงล่าสุด</option>
+          <option value="today">วันนี้</option>
+        </select>
+      </label>
+
+      <div class="gallery-search">
+        <span aria-hidden="true">⌕</span>
+        <input id="gallerySearch" type="search" placeholder="ค้นหาชื่อไฟล์ เช่น IMG_0025" autocomplete="off" oninput="filterGalleryPhotos(this.value)" aria-label="ค้นหารูปจากชื่อไฟล์">
+        <button type="button" class="search-clear" onclick="clearGallerySearch()" aria-label="ล้างคำค้น">ล้าง</button>
+        <span id="searchStatus" class="search-status" aria-live="polite"></span>
       </div>
 
       <div class="toolbar-actions">
@@ -164,7 +182,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261119-csbxxm-10"></script>
+  <script src="/js/gallery.js?v=20261119-csbxxm-14"></script>
   <script>initGallery()</script>
 </body>
 </html>

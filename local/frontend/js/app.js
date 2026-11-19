@@ -118,7 +118,7 @@ async function loadDashboard() {
       <button onclick='navigator.clipboard.writeText(${jsArg(data.active_event.incoming_path)})'>Copy Path</button>
       <button class="secondary" onclick='openFolder(${jsArg(data.active_event.id)})'>Open Folder</button>
       <button class="secondary" onclick='showQr(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Show QR</button>
-      <button class="secondary" onclick='openKioskModal(${jsArg(data.active_event.name)}, "/api/events/" + ${jsArg(data.active_event.id)} + "/qr.png", ${jsArg(data.active_event.id)})'>📺 Kiosk Screen</button>
+      <button class="secondary" onclick='openKioskPage(${jsArg(data.active_event.gallery_url)})'>📺 เปิดสไลด์โชว์บนจอใหญ่</button>
       <button class="secondary" onclick='shareGallery(${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Share Gallery</button>
       <button class="secondary" onclick='rebuildPhotos(${jsArg(data.active_event.id)})'>Rebuild Gallery Files</button>
       <button class="warn" onclick='pause(${jsArg(data.active_event.id)})'>${data.active_event.publishing_paused ? "Resume Publishing" : "Pause Publishing"}</button>
@@ -175,6 +175,17 @@ async function openKioskModal(name, qrSrc, eventId) {
   if (kioskState === state) {
     state.refreshTimer = setInterval(refreshKioskPhotos, 15000);
     state.slideTimer = setInterval(() => { if (kioskState === state && !state.paused) stepKiosk(1); }, 6000);
+  }
+}
+
+function openKioskPage(galleryUrl) {
+  try {
+    const url = new URL(galleryUrl, location.origin);
+    url.searchParams.set("slideshow", "1");
+    window.open(url.toString(), "_blank", "noopener");
+  } catch (error) {
+    console.error("Unable to open event slideshow", error);
+    showToast("เปิดหน้าแกลเลอรีไม่สำเร็จ ตรวจสอบลิงก์แกลเลอรีของงาน", "error");
   }
 }
 
@@ -316,7 +327,7 @@ document.addEventListener("keydown", event => {
 });
 
 async function showQr(id, url, name = "") {
-  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><button class="button secondary" onclick='openKioskModal(${jsArg(name || "CS.BXXM Studio")}, "/api/events/${id}/qr.png", ${jsArg(id)})'>📺 ขยายจอใหญ่ (Kiosk)</button><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', '${name || "CS.BXXM Gallery"}')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
+  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><button class="button secondary" onclick='openKioskPage(${jsArg(url)})'>📺 เปิดสไลด์โชว์</button><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', '${name || "CS.BXXM Gallery"}')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
 }
 async function loadPreflight(id) {
   const data = await api(`/api/events/${id}/preflight`);

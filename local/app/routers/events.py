@@ -627,7 +627,7 @@ def event_gallery_photos(event_id: str, request: Request, response: Response = N
     rows = (
         db.query(Photo)
         .filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False)
-        .order_by(Photo.created_at.desc())
+        .order_by(Photo.created_at.desc(), Photo.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()

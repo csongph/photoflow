@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import os
 import time
+from datetime import timezone
 import tempfile
 from threading import Lock
 from pathlib import Path
@@ -242,7 +243,7 @@ def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60,
         require_gallery_access(event)
     page = max(page, 1)
     page_size = min(max(page_size, 1), 100)
-    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).offset((page - 1) * page_size).limit(page_size).all()
+    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc(), Photo.id.desc()).offset((page - 1) * page_size).limit(page_size).all()
     photo_ids = [photo.id for photo in rows]
     variants_by_photo: dict[str, list[PhotoVariant]] = {photo_id: [] for photo_id in photo_ids}
     if photo_ids:
@@ -252,6 +253,7 @@ def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60,
         {
             "id": p.id,
             "filename": p.filename,
+            "created_at": (p.created_at.replace(tzinfo=timezone.utc) if p.created_at and p.created_at.tzinfo is None else p.created_at).isoformat() if p.created_at else "",
             "variants": variants_for_photo(
                 db,
                 p,
@@ -370,7 +372,7 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
         require_gallery_access(event)
     if settings and not settings.allow_download:
         raise HTTPException(403, "Downloads are disabled")
-    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()
+    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc(), Photo.id.desc()).all()
     photo_ids = [photo.id for photo in rows]
     variants_by_photo: dict[str, list[PhotoVariant]] = {}
     if photo_ids:

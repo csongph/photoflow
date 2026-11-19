@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import os
 import time
+from datetime import timezone
 from threading import Lock
 from pathlib import Path
 
@@ -186,7 +187,7 @@ def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60,
     rows = (
         db.query(Photo)
         .filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False)
-        .order_by(Photo.created_at.desc())
+        .order_by(Photo.created_at.desc(), Photo.id.desc())
         .offset((page - 1) * page_size)
         .limit(page_size)
         .all()
@@ -212,7 +213,10 @@ def photos(public_id: str, request: Request, page: int = 1, page_size: int = 60,
             drive_id = uploaded.get("finished").object_id if uploaded.get("finished") else ""
             url = f"/api/gallery/{public_id}/photos/{photo.id}/download"
             variants.append({"kind": "finished", "url": url, "drive_id": drive_id})
-        result.append({"id": photo.id, "filename": photo.filename, "variants": variants})
+        created_at = photo.created_at
+        if created_at and created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        result.append({"id": photo.id, "filename": photo.filename, "created_at": created_at.isoformat() if created_at else "", "variants": variants})
     return result
 
 
@@ -250,7 +254,7 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
         require_gallery_access(event)
     if not gallery_settings(event).get("allow_download", True):
         raise HTTPException(403, "Downloads are disabled")
-    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()
+    rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc(), Photo.id.desc()).all()
     result = []
     for photo in rows:
         path = next(

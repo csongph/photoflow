@@ -8,6 +8,7 @@ const configuredApi = window.MOMENTLINK_API_URL || "";
 const API = (params.get("api") || configuredApi || location.origin).replace(/\/$/, "");
 const pathPublicId = location.pathname.split("/").filter(Boolean).pop() || "";
 const publicId = params.get("event") || (pathPublicId === "gallery" || pathPublicId === "index.html" ? "" : pathPublicId);
+const slideshowOnOpen = params.get("slideshow") === "1";
 
 let knownPhotoCount = 0;
 let loadingPhotos = false;
@@ -26,6 +27,8 @@ let galleryMeta = {
 
 let galleryPhotos = [];
 let currentFilter = "all"; // "all" | "recent"
+let photoSearchQuery = "";
+let photoTimeFilter = "all";
 let currentPhotoIndex = -1;
 let touchStartX = 0;
 let touchStartY = 0;
@@ -37,6 +40,7 @@ const failedPreparationIds = new Set();
 const preparationControllers = new Map();
 let fallbackObjectUrls = [];
 const MAX_SHARE_SELECTION = 10;
+let publicSlideshowState = null;
 let sessionStartTime = Date.now();
 
 // Utility Toast
@@ -143,6 +147,7 @@ async function initGallery() {
 
     if (!s.locked) {
       await loadPhotos(true);
+      if (slideshowOnOpen) startEventSlideshow();
     }
 
     clearInterval(galleryRefreshTimer);
@@ -310,33 +315,41 @@ async function loadPhotos(reset = false) {
     const newPhotos = photos.filter(photo => !document.querySelector(`[data-id='${photo.id}']`));
     const isInitial = galleryPhotos.length === 0;
 
-    // Photos arrive newest first
-    for (const photo of newPhotos) {
+    // The API returns newest first. Keep that order in both the data model
+    // and the DOM so customers see the latest event photos at the top.
+    const addedPhotos = newPhotos.map(photo => {
       const thumb = photo.variants?.find(v => v.kind === "thumbnail")?.url || "";
       const preview = photo.variants?.find(v => v.kind === "preview")?.url || thumb;
       const finished = photo.variants?.find(v => v.kind === "finished")?.url || "";
       const isRecent = (Date.now() - sessionStartTime < 300000) || !isInitial;
 
-      const galleryPhoto = { 
+      return {
         id: photo.id, 
-        filename: photo.filename, 
+        filename: photo.filename,
+        createdAt: photo.created_at || "",
         thumb, 
         preview, 
         finished,
         download: `/api/gallery/${publicId}/photos/${photo.id}/download`,
         isRecent
       };
-
-      galleryPhotos.unshift(galleryPhoto);
-      const card = createPhotoCard(galleryPhoto);
-      grid.prepend(card);
+    });
+    if (addedPhotos.length) {
+      galleryPhotos = [...addedPhotos, ...galleryPhotos];
+      [...addedPhotos].reverse().forEach(photo => grid.prepend(createPhotoCard(photo)));
     }
 
     knownPhotoCount = Math.max(knownPhotoCount, galleryPhotos.length);
     updatePhotoCountUI(knownPhotoCount);
     updateRecentCount();
+    applyPhotoFilters();
 
     if (syncText) syncText.textContent = "LIVE SYNC";
+    if (publicSlideshowState) {
+      const currentIndex = galleryPhotos.findIndex(photo => photo.id === publicSlideshowState.photoId);
+      if (currentIndex >= 0) publicSlideshowState.index = currentIndex;
+      else showPublicSlideshowPhoto(publicSlideshowState.index);
+    }
   } catch (err) {
     console.error(err);
     if (syncText) syncText.textContent = "OFFLINE";
@@ -350,12 +363,16 @@ function createPhotoCard(photo) {
   card.className = "photo-card";
   card.dataset.id = photo.id;
   card.dataset.recent = photo.isRecent ? "true" : "false";
+  card.dataset.filename = String(photo.filename || "").toLocaleLowerCase();
+  card.dataset.createdAt = photo.createdAt || "";
 
   const safeName = escapeHtml(photo.filename);
+  const timeLabel = formatGalleryPhotoTime(photo.createdAt);
   
   card.innerHTML = `
     ${photo.isRecent ? `<span class="photo-badge-new">NEW</span>` : ""}
     <img src="${photo.thumb || photo.preview}" alt="${safeName}" loading="lazy">
+    ${timeLabel.short ? `<time class="photo-card-time" datetime="${escapeHtml(photo.createdAt)}" title="เพิ่มในแกลเลอรี: ${escapeHtml(timeLabel.full)}">${escapeHtml(timeLabel.short)}</time>` : ""}
     ${galleryMeta.allowDownload ? `<a class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" href="${escapeHtml(freshDownloadUrl(photo.download))}" download="${safeName}" target="_blank" rel="noopener">
       ↓
     </a>` : ""}
@@ -380,19 +397,243 @@ function createPhotoCard(photo) {
   return card;
 }
 
-function setPhotoFilter(filter) {
-  currentFilter = filter;
-  document.querySelector("#filterAll")?.classList.toggle("active", filter === "all");
-  document.querySelector("#filterRecent")?.classList.toggle("active", filter === "recent");
+function formatGalleryPhotoTime(value) {
+  const date = new Date(value);
+  if (!value || !Number.isFinite(date.getTime())) return { short: "", full: "" };
+  const short = new Intl.DateTimeFormat("th-TH", {
+    day: "numeric", month: "short", hour: "2-digit", minute: "2-digit"
+  }).format(date);
+  const full = new Intl.DateTimeFormat("th-TH", {
+    dateStyle: "long", timeStyle: "short"
+  }).format(date);
+  return { short, full };
+}
 
-  const cards = document.querySelectorAll(".photo-card");
+function filterGalleryPhotos(value) {
+  photoSearchQuery = String(value || "").trim().toLocaleLowerCase();
+  applyPhotoFilters();
+}
+
+function clearGallerySearch() {
+  const input = document.querySelector("#gallerySearch");
+  if (input) input.value = "";
+  photoSearchQuery = "";
+  applyPhotoFilters();
+  input?.focus();
+}
+
+function applyPhotoFilters() {
+  const cards = [...document.querySelectorAll(".photo-card")];
+  let visibleCount = 0;
   cards.forEach(card => {
-    if (filter === "recent") {
-      card.style.display = card.dataset.recent === "true" ? "block" : "none";
-    } else {
-      card.style.display = "block";
+    const matchesRecent = currentFilter !== "recent" || card.dataset.recent === "true";
+    const matchesSearch = !photoSearchQuery || (card.dataset.filename || "").includes(photoSearchQuery);
+    const photoTime = Date.parse(card.dataset.createdAt || "");
+    let matchesTime = photoTimeFilter === "all";
+    if (photoTimeFilter === "today") {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      matchesTime = Number.isFinite(photoTime) && photoTime >= todayStart.getTime() && photoTime <= Date.now();
+    } else if (photoTimeFilter !== "all") {
+      const limits = { "15m": 15 * 60 * 1000, "1h": 60 * 60 * 1000, "3h": 3 * 60 * 60 * 1000 };
+      const duration = limits[photoTimeFilter];
+      matchesTime = Number.isFinite(photoTime) && duration !== undefined && photoTime >= Date.now() - duration && photoTime <= Date.now();
     }
+    const visible = matchesRecent && matchesSearch && matchesTime;
+    card.style.display = visible ? "" : "none";
+    if (visible) visibleCount += 1;
   });
+
+  let empty = document.querySelector("#searchEmptyState");
+  const hasActiveFilter = Boolean(photoSearchQuery) || photoTimeFilter !== "all" || currentFilter === "recent";
+  if (hasActiveFilter && cards.length && visibleCount === 0) {
+    if (!empty) {
+      empty = document.createElement("div");
+      empty.id = "searchEmptyState";
+      empty.className = "search-empty";
+      document.querySelector("#grid")?.appendChild(empty);
+    }
+    empty.textContent = photoSearchQuery ? "ไม่พบรูปที่ตรงกับชื่อไฟล์นี้" : "ไม่พบรูปในช่วงเวลาที่เลือก";
+  } else {
+    empty?.remove();
+  }
+
+  const status = document.querySelector("#searchStatus");
+  if (status) status.textContent = hasActiveFilter
+    ? "พบ " + visibleCount + " จาก " + cards.length + " รูป"
+    : "";
+}
+
+function setPhotoTimeFilter(value) {
+  photoTimeFilter = ["all", "15m", "1h", "3h", "today"].includes(value) ? value : "all";
+  document.querySelector(".time-filter")?.classList.toggle("is-active", photoTimeFilter !== "all");
+  applyPhotoFilters();
+}
+
+function setPhotoFilter(filter) {
+  currentFilter = filter === "recent" ? "recent" : "all";
+  document.querySelector("#filterAll")?.classList.toggle("active", currentFilter === "all");
+  document.querySelector("#filterRecent")?.classList.toggle("active", currentFilter === "recent");
+  applyPhotoFilters();
+}
+
+function startEventSlideshow() {
+  if (!publicId) {
+    showToast("ลิงก์นี้ยังไม่ได้เลือกแกลเลอรีของงาน", "error");
+    return;
+  }
+  if (publicSlideshowState) return;
+  const overlay = document.createElement("section");
+  overlay.id = "publicSlideshow";
+  overlay.className = "public-slideshow";
+  overlay.innerHTML = `
+    <div class="public-slideshow-stage" id="publicSlideshowStage">
+      <img class="public-slideshow-image is-active" id="publicSlideshowImageA" alt="ภาพจากงาน">
+      <img class="public-slideshow-image" id="publicSlideshowImageB" alt="ภาพจากงาน" aria-hidden="true">
+      <div class="public-slideshow-empty" id="publicSlideshowEmpty">กำลังรอรูปภาพจากงานนี้…</div>
+    </div>
+    <header class="public-slideshow-heading"><span>CS.BXXM STUDIO</span><strong>${escapeHtml(galleryMeta.eventName)}</strong></header>
+    <aside class="public-slideshow-qr"><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกน QR Code เพื่อดาวน์โหลดรูปภาพ</b></aside>
+    <div class="public-slideshow-controls" id="publicSlideshowControls">
+      <button type="button" onclick="closeEventSlideshow()">กลับแกลเลอรี</button>
+      <button type="button" onclick="togglePublicSlideshowPlayback()" id="publicSlideshowPlay">พักภาพ</button>
+      <button type="button" onclick="stepPublicSlideshow(-1)" aria-label="ภาพก่อนหน้า">‹ ก่อนหน้า</button>
+      <button type="button" onclick="stepPublicSlideshow(1)" aria-label="ภาพถัดไป">ถัดไป ›</button>
+      <label>เปลี่ยนภาพ<select onchange="setPublicSlideshowTransition(this.value)"><option value="fade">Fade</option><option value="slide">Slide</option><option value="dissolve">Dissolve</option></select></label>
+      <label>ความเร็ว<select onchange="setPublicSlideshowInterval(this.value)"><option value="4000">4 วินาที</option><option value="6000" selected>6 วินาที</option><option value="8000">8 วินาที</option><option value="10000">10 วินาที</option></select></label>
+      <button type="button" onclick="togglePublicSlideshowFullscreen()">เต็มจอ</button>
+    </div>
+  `;
+  document.body.appendChild(overlay);
+  document.body.classList.add("slideshow-is-open");
+  const state = { index: 0, photoId: "", paused: false, transition: "fade", interval: 6000, slideTimer: null, hideTimer: null, sequence: 0, failedUrls: new Set() };
+  publicSlideshowState = state;
+  state.slideTimer = setInterval(() => { if (publicSlideshowState === state && !state.paused) stepPublicSlideshow(1); }, state.interval);
+  const reveal = () => revealPublicSlideshowControls();
+  overlay.addEventListener("pointermove", reveal, { passive: true });
+  overlay.addEventListener("touchstart", reveal, { passive: true });
+  let touchX = 0;
+  let touchY = 0;
+  overlay.addEventListener("touchstart", event => {
+    touchX = event.changedTouches[0]?.clientX || 0;
+    touchY = event.changedTouches[0]?.clientY || 0;
+  }, { passive: true });
+  overlay.addEventListener("touchend", event => {
+    const dx = (event.changedTouches[0]?.clientX || touchX) - touchX;
+    const dy = (event.changedTouches[0]?.clientY || touchY) - touchY;
+    if (Math.abs(dx) > 55 && Math.abs(dx) > Math.abs(dy) * 1.3) stepPublicSlideshow(dx < 0 ? 1 : -1);
+  }, { passive: true });
+  overlay.addEventListener("click", event => {
+    if (event.target.id === "publicSlideshowStage" || event.target.classList.contains("public-slideshow-image")) reveal();
+  });
+  if (galleryPhotos.length) showPublicSlideshowPhoto(0);
+  reveal();
+}
+
+function revealPublicSlideshowControls() {
+  if (!publicSlideshowState) return;
+  const overlay = document.querySelector("#publicSlideshow");
+  if (!overlay) return;
+  overlay.classList.remove("controls-hidden");
+  clearTimeout(publicSlideshowState.hideTimer);
+  publicSlideshowState.hideTimer = setTimeout(() => overlay.classList.add("controls-hidden"), 3200);
+}
+
+function closeEventSlideshow() {
+  if (publicSlideshowState) {
+    clearInterval(publicSlideshowState.slideTimer);
+    clearTimeout(publicSlideshowState.hideTimer);
+    publicSlideshowState = null;
+  }
+  document.querySelector("#publicSlideshow")?.remove();
+  document.body.classList.remove("slideshow-is-open");
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  const url = new URL(location.href);
+  url.searchParams.delete("slideshow");
+  history.replaceState({}, "", url);
+}
+
+async function showPublicSlideshowPhoto(index) {
+  if (!publicSlideshowState || !galleryPhotos.length) return;
+  const state = publicSlideshowState;
+  const sequence = ++state.sequence;
+  let photo = null;
+  let imageUrl = "";
+  for (let offset = 0; offset < galleryPhotos.length; offset += 1) {
+    const candidate = galleryPhotos[(index + offset + galleryPhotos.length) % galleryPhotos.length];
+    const candidateUrl = candidate.preview || candidate.thumb;
+    if (!candidateUrl || state.failedUrls.has(candidateUrl)) continue;
+    const preload = new Image();
+    preload.src = candidateUrl;
+    try {
+      await preload.decode();
+      photo = candidate;
+      imageUrl = candidateUrl;
+      break;
+    } catch {
+      state.failedUrls.add(candidateUrl);
+      console.warn("Skipping unavailable slideshow photo", candidate.id);
+    }
+  }
+  if (publicSlideshowState !== state || state.sequence !== sequence) return;
+  if (!photo) {
+    const empty = document.querySelector("#publicSlideshowEmpty");
+    if (empty) { empty.hidden = false; empty.textContent = "ยังไม่มีรูปภาพที่แสดงได้"; }
+    return;
+  }
+  const stage = document.querySelector("#publicSlideshowStage");
+  const active = stage?.querySelector(".public-slideshow-image.is-active");
+  const next = active?.id === "publicSlideshowImageA" ? document.querySelector("#publicSlideshowImageB") : document.querySelector("#publicSlideshowImageA");
+  if (!stage || !active || !next) return;
+  next.src = imageUrl;
+  next.alt = photo.filename || "ภาพจากงาน";
+  next.dataset.photoId = photo.id;
+  next.classList.add("is-active");
+  active.classList.remove("is-active");
+  stage.dataset.transition = state.transition;
+  state.index = galleryPhotos.findIndex(item => item.id === photo.id);
+  state.photoId = photo.id;
+  const empty = document.querySelector("#publicSlideshowEmpty");
+  if (empty) empty.hidden = true;
+}
+
+function stepPublicSlideshow(direction) {
+  if (!publicSlideshowState || !galleryPhotos.length) return;
+  showPublicSlideshowPhoto(publicSlideshowState.index + direction);
+}
+
+function togglePublicSlideshowPlayback() {
+  if (!publicSlideshowState) return;
+  publicSlideshowState.paused = !publicSlideshowState.paused;
+  const button = document.querySelector("#publicSlideshowPlay");
+  if (button) button.textContent = publicSlideshowState.paused ? "เล่นต่อ" : "พักภาพ";
+}
+
+function setPublicSlideshowTransition(value) {
+  if (!publicSlideshowState || !["fade", "slide", "dissolve"].includes(value)) return;
+  publicSlideshowState.transition = value;
+  const stage = document.querySelector("#publicSlideshowStage");
+  if (stage) stage.dataset.transition = value;
+}
+
+function setPublicSlideshowInterval(value) {
+  if (!publicSlideshowState) return;
+  const milliseconds = Number(value);
+  if (![4000, 6000, 8000, 10000].includes(milliseconds)) return;
+  const state = publicSlideshowState;
+  clearInterval(state.slideTimer);
+  state.interval = milliseconds;
+  state.slideTimer = setInterval(() => { if (publicSlideshowState === state && !state.paused) stepPublicSlideshow(1); }, milliseconds);
+}
+
+async function togglePublicSlideshowFullscreen() {
+  const screen = document.querySelector("#publicSlideshow");
+  try {
+    if (!document.fullscreenElement) await screen?.requestFullscreen();
+    else await document.exitFullscreen();
+  } catch (error) {
+    showToast("กด F11 เพื่อขยายหน้าต่างเต็มจอ", "info");
+  }
 }
 
 function updateRecentCount() {
@@ -760,6 +1001,14 @@ document.addEventListener("visibilitychange", () => {
 });
 
 document.addEventListener("keydown", ev => {
+  if (publicSlideshowState) {
+    if (ev.target instanceof HTMLElement && /^(INPUT|SELECT|TEXTAREA|BUTTON)$/.test(ev.target.tagName)) return;
+    if (ev.key === "ArrowLeft") { stepPublicSlideshow(-1); revealPublicSlideshowControls(); }
+    else if (ev.key === "ArrowRight") { stepPublicSlideshow(1); revealPublicSlideshowControls(); }
+    else if (ev.code === "Space") { ev.preventDefault(); togglePublicSlideshowPlayback(); revealPublicSlideshowControls(); }
+    else if (ev.key === "Escape") closeEventSlideshow();
+    return;
+  }
   if (currentPhotoIndex < 0) return;
   if (ev.key === "ArrowLeft") moveLightbox(-1);
   if (ev.key === "ArrowRight") moveLightbox(1);

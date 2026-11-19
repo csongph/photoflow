@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from PIL import Image
@@ -425,6 +426,20 @@ def test_gallery_uses_local_media_for_display_and_drive_for_download(tmp_path: P
         assert variants["thumbnail"]["url"].startswith(f"/media/{event.id}/THUMBNAILS/")
         assert variants["preview"]["url"].startswith(f"/media/{event.id}/PREVIEWS/")
         assert variants["finished"]["url"].startswith(f"/api/gallery/{event.public_id}/photos/{photo.id}/download")
+
+
+def test_gallery_returns_latest_published_photo_first(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    now = datetime.utcnow()
+    with SessionLocal() as db:
+        older = Photo(event_id=event.id, capture_id="older", filename="older.jpg", checksum="older-checksum", status="PUBLISHED", published=True, created_at=now - timedelta(minutes=1))
+        latest = Photo(event_id=event.id, capture_id="latest", filename="latest.jpg", checksum="latest-checksum", status="PUBLISHED", published=True, created_at=now)
+        db.add_all((older, latest))
+        db.commit()
+        request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "server": ("localhost", 80), "client": ("localhost", 1), "scheme": "http"})
+        rows = gallery_photos(event.public_id, request=request, db=db)
+        assert [row["filename"] for row in rows] == ["latest.jpg", "older.jpg"]
 
 
 def test_gallery_downloads_best_available_photo_variant(tmp_path: Path):
