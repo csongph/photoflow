@@ -79,6 +79,10 @@ function freshDownloadUrl(url) {
   return result.toString();
 }
 
+function isAppleMobileDevice() {
+  return /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+}
+
 // -------------------------------------------------------------------------
 // INITIALIZATION
 // -------------------------------------------------------------------------
@@ -92,6 +96,8 @@ async function initGallery() {
     if (controls) controls.style.display = "none";
     if (shareCard) shareCard.style.display = "none";
     if (statusBar) statusBar.style.display = "none";
+    const floatingQr = document.querySelector("#floatingGalleryQr");
+    if (floatingQr) floatingQr.hidden = true;
     document.querySelector("#grid").innerHTML = `
       <div class="empty-gallery">
         <span class="empty-icon">📷</span>
@@ -144,6 +150,8 @@ async function initGallery() {
 
     const pinPanel = document.querySelector("#pinPanel");
     if (pinPanel) pinPanel.style.display = s.locked ? "flex" : "none";
+    const floatingQr = document.querySelector("#floatingGalleryQr");
+    if (floatingQr) floatingQr.hidden = Boolean(s.locked);
 
     if (!s.locked) {
       await loadPhotos(true);
@@ -189,6 +197,20 @@ function setupScreenQr() {
   const mobileQr = document.querySelector("#mobileQr");
   const qrUrl = `${API}/api/gallery/${publicId}/qr.png`;
   if (mobileQr) mobileQr.src = qrUrl;
+  const floatingQr = document.querySelector("#floatingQrImage");
+  if (floatingQr) floatingQr.src = qrUrl;
+  const largeQr = document.querySelector("#largeQrImage");
+  if (largeQr) largeQr.src = qrUrl;
+}
+
+function openGalleryQrDialog() {
+  const dialog = document.querySelector("#galleryQrDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function closeGalleryQrDialog() {
+  const dialog = document.querySelector("#galleryQrDialog");
+  if (dialog?.open) dialog.close();
 }
 
 function renderGalleryInfo() {
@@ -373,17 +395,8 @@ function createPhotoCard(photo) {
     ${photo.isRecent ? `<span class="photo-badge-new">NEW</span>` : ""}
     <img src="${photo.thumb || photo.preview}" alt="${safeName}" loading="lazy">
     ${timeLabel.short ? `<time class="photo-card-time" datetime="${escapeHtml(photo.createdAt)}" title="เพิ่มในแกลเลอรี: ${escapeHtml(timeLabel.full)}">${escapeHtml(timeLabel.short)}</time>` : ""}
-    ${galleryMeta.allowDownload ? `<a class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" href="${escapeHtml(freshDownloadUrl(photo.download))}" download="${safeName}" target="_blank" rel="noopener">
-      ↓
-    </a>` : ""}
     <div class="photo-select-mark" aria-hidden="true">✓</div>
   `;
-
-  card.querySelector(".card-quick-download")?.addEventListener("click", event => {
-    event.stopPropagation();
-    event.currentTarget.href = freshDownloadUrl(photo.download);
-    showToast("เริ่มดาวน์โหลดรูปแล้ว", "info");
-  });
 
   card.onclick = () => {
     if (selectionMode) {
@@ -505,6 +518,8 @@ function startEventSlideshow() {
     </div>
   `;
   document.body.appendChild(overlay);
+  const floatingQr = document.querySelector("#floatingGalleryQr");
+  if (floatingQr) floatingQr.hidden = true;
   document.body.classList.add("slideshow-is-open");
   const state = { index: 0, photoId: "", paused: false, transition: "fade", interval: 6000, slideTimer: null, hideTimer: null, sequence: 0, failedUrls: new Set() };
   publicSlideshowState = state;
@@ -547,6 +562,8 @@ function closeEventSlideshow() {
   }
   document.querySelector("#publicSlideshow")?.remove();
   document.body.classList.remove("slideshow-is-open");
+  const floatingQr = document.querySelector("#floatingGalleryQr");
+  if (floatingQr) floatingQr.hidden = false;
   if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
   const url = new URL(location.href);
   url.searchParams.delete("slideshow");
@@ -675,7 +692,7 @@ function toggleSelectionMode() {
     selectModeBtn.classList.toggle("active", selectionMode);
     selectModeBtn.innerHTML = selectionMode 
       ? `<span class="btn-icon">✕</span> ยกเลิกการเลือก` 
-      : `<span class="btn-icon">✓</span> เลือกหลายรูป`;
+      : `<span class="btn-icon">✓</span> เลือกเพื่อบันทึก`;
   }
 
   document.querySelectorAll(".photo-card").forEach(card => {
@@ -768,7 +785,8 @@ function updateSelectionControls() {
   if (countLabel) countLabel.textContent = preparing ? `เตรียมรูป ${ready}/${count}` : `เลือก ${count} รูป`;
   if (downloadButton) {
     downloadButton.disabled = count === 0 || preparing > 0 || (ready !== count && failed === 0);
-    downloadButton.innerHTML = `<span class="btn-icon">↓</span> ${preparing ? `เตรียมรูป ${ready}/${count}` : failed ? `ดาวน์โหลดแยก ${count} รูป` : `แชร์/บันทึก ${count} รูป`}`;
+    const readyLabel = `บันทึกรูป ${count} รูป`;
+    downloadButton.innerHTML = `<span class="btn-icon">${preparing ? "…" : "↓"}</span> ${preparing ? `เตรียมรูป ${ready}/${count}` : failed ? `ดาวน์โหลดแยก ${count} รูป` : readyLabel}`;
   }
 }
 
@@ -786,8 +804,9 @@ function downloadSelectedPhotos(event) {
     return;
   }
   if (navigator.share && navigator.canShare?.({ files })) {
+    showToast("ในเมนูแชร์ เลือก Photos หรือ Gallery เพื่อบันทึกรูป", "info");
     navigator.share({ files, title: galleryMeta.eventName, text: `รูปจากงาน ${galleryMeta.eventName}` })
-      .then(() => showToast(`ส่งรูป ${files.length} รูปไปยังเมนูแชร์แล้ว`, "success"))
+      .then(() => showToast("ส่งรูปไปยังแอปที่เลือกแล้ว", "success"))
       .catch(error => {
         if (error.name !== "AbortError") {
           console.error("Share sheet failed", error);
@@ -817,9 +836,8 @@ function showDownloadFallback(photoIds, startDownloads = false) {
   }).join("");
   if (!dialog.open) dialog.showModal();
   const message = document.querySelector("#downloadFallbackMessage");
-  const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-  if (message) message.textContent = isAppleMobile
-    ? "แตะชื่อรูปเพื่อเปิดหรือดาวน์โหลดทีละรูป หากภาพเปิดขึ้นมา ให้แตะค้างแล้วเลือกบันทึกไปยัง Photos"
+  if (message) message.textContent = isAppleMobileDevice()
+    ? "หากส่งหลายรูปไม่สำเร็จ ให้ลองเลือกรูปจำนวนน้อยลงแล้วกดบันทึกอีกครั้ง หากยังไม่ได้ แตะชื่อไฟล์เพื่อดาวน์โหลดแยก"
     : startDownloads
       ? "ระบบจะเริ่มดาวน์โหลดรูปแยกไฟล์ตามที่เบราว์เซอร์อนุญาต หากถูกบล็อก ให้แตะชื่อรูปเพื่อดาวน์โหลดทีละรูป"
       : "แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์ ระบบไม่สามารถยืนยันการบันทึกลงเครื่องแทนเบราว์เซอร์ได้";
@@ -842,7 +860,7 @@ document.querySelector("#downloadFallbackDialog")?.addEventListener("close", () 
 });
 
 // -------------------------------------------------------------------------
-// LIGHTBOX & MOBILE SHARING
+// LIGHTBOX VIEW
 // -------------------------------------------------------------------------
 
 function openLightbox(index) {
@@ -871,72 +889,20 @@ function openLightbox(index) {
         <button class="stage-nav next" onclick="moveLightbox(1)" aria-label="รูปถัดไป">›</button>
       </div>
 
-      <div class="lightbox-actions">
-    ${galleryMeta.allowDownload ? `<a class="btn btn-primary" href="${escapeHtml(freshDownloadUrl(photo.download))}" download="${safeName}" target="_blank" rel="noopener">
-          <span class="btn-icon">↓</span> บันทึกรูปภาพนี้
-    </a>` : ""}
-        <button class="btn btn-secondary" onclick="sharePhotoNative(${index})">
-          <span class="btn-icon">↗</span> แชร์รูปนี้ (LINE / IG)
-        </button>
-      </div>
+      ${galleryMeta.allowDownload ? `<div class="lightbox-actions"><button type="button" class="btn btn-primary" id="selectExpandedPhoto"><span class="btn-icon">✓</span> เลือกรูปเพื่อบันทึก</button></div>` : ""}
     </div>
   `;
 
-  modal.querySelector(".lightbox-actions .btn-primary")?.addEventListener("click", event => {
-    event.currentTarget.href = freshDownloadUrl(photo.download);
-    showToast("เริ่มดาวน์โหลดรูปแล้ว", "info");
-  });
-
+  modal.querySelector("#selectExpandedPhoto")?.addEventListener("click", () => selectPhotoForSaving(photo.id));
   modal.classList.add("open");
   document.body.style.overflow = "hidden";
 }
 
-async function sharePhotoNative(index) {
-  const photo = galleryPhotos[index];
-  if (!photo) return;
-
-  if (!galleryMeta.allowDownload) {
-    if (navigator.share) {
-      try { await navigator.share({ title: galleryMeta.eventName, text: `ดูรูปจากงาน ${galleryMeta.eventName}`, url: galleryUrl }); }
-      catch (error) { if (error.name !== "AbortError") console.error(error); }
-    } else {
-      await copyShareText();
-    }
-    return;
-  }
-
-  if (navigator.share) {
-    try {
-      // Try sharing as file if supported
-      const response = await fetch(freshDownloadUrl(photo.download), { credentials: "include", cache: "no-store" });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const blob = await response.blob();
-      const file = new File([blob], photo.filename, { type: blob.type });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        await navigator.share({
-          files: [file],
-          title: galleryMeta.eventName,
-          text: `รูปถ่ายจากงาน ${galleryMeta.eventName} · CS.BXXM STUDIO`
-        });
-        return;
-      }
-    } catch (e) {
-      console.warn("Share files failed, fallback to url", e);
-    }
-
-    try {
-      await navigator.share({
-        title: galleryMeta.eventName,
-        text: `ดูรูปของฉันจากงาน ${galleryMeta.eventName}:`,
-        url: galleryUrl
-      });
-    } catch (e) {
-      // User cancelled
-    }
-  } else {
-    copyShareText();
-  }
+function selectPhotoForSaving(photoId) {
+  closeLightbox();
+  if (!selectionMode) toggleSelectionMode();
+  const card = [...document.querySelectorAll(".photo-card")].find(item => item.dataset.id === photoId);
+  if (card && !selectedPhotoIds.has(photoId)) togglePhotoSelection(photoId, card);
 }
 
 function closeLightbox() {

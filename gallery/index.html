@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-14">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-22">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -82,17 +82,16 @@
         </select>
       </label>
 
-      <div class="gallery-search">
-        <span aria-hidden="true">⌕</span>
-        <input id="gallerySearch" type="search" placeholder="ค้นหาชื่อไฟล์ เช่น IMG_0025" autocomplete="off" oninput="filterGalleryPhotos(this.value)" aria-label="ค้นหารูปจากชื่อไฟล์">
-        <button type="button" class="search-clear" onclick="clearGallerySearch()" aria-label="ล้างคำค้น">ล้าง</button>
+      <div class="search-control">
+        <div class="gallery-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="gallerySearch" type="search" placeholder="ค้นหาชื่อไฟล์ เช่น IMG_0025" autocomplete="off" oninput="filterGalleryPhotos(this.value)" aria-label="ค้นหารูปจากชื่อไฟล์">
+          <button type="button" class="search-clear" onclick="clearGallerySearch()" aria-label="ล้างคำค้น">ล้าง</button>
+        </div>
         <span id="searchStatus" class="search-status" aria-live="polite"></span>
       </div>
 
       <div class="toolbar-actions">
-        <button id="selectModeBtn" class="btn btn-ghost" onclick="toggleSelectionMode()" aria-pressed="false">
-          <span class="btn-icon">✓</span> เลือกหลายรูป
-        </button>
         <button class="btn btn-ghost icon-only" onclick="loadPhotos(true)" title="รีเฟรชรูปภาพ">
           <span class="btn-icon">🔄</span>
         </button>
@@ -142,6 +141,13 @@
     </footer>
   </main>
 
+  <aside class="floating-gallery-qr" id="floatingGalleryQr" hidden>
+    <button type="button" class="floating-gallery-qr-trigger" onclick="openGalleryQrDialog()" aria-label="เปิด QR Code สำหรับแกลเลอรี">
+      <img id="floatingQrImage" alt="QR Code เปิดแกลเลอรีนี้">
+      <span>สแกนดูรูป</span>
+    </button>
+  </aside>
+
   <!-- Floating Mobile Action Dock -->
   <aside class="floating-dock" id="floatingDock">
     <div class="dock-container">
@@ -178,11 +184,22 @@
     </div>
   </dialog>
 
+  <dialog id="galleryQrDialog" class="gallery-qr-dialog" onclick="if(event.target===this) closeGalleryQrDialog()">
+    <div class="gallery-qr-dialog-content">
+      <button type="button" class="gallery-qr-close" onclick="closeGalleryQrDialog()" aria-label="ปิด">✕</button>
+      <p class="section-eyebrow">SCAN & SHARE</p>
+      <h2>สแกนเพื่อเปิดแกลเลอรี</h2>
+      <img id="largeQrImage" alt="QR Code สำหรับเปิดแกลเลอรีและดาวน์โหลดรูป">
+      <p>เปิดกล้องมือถือแล้วสแกน QR Code เพื่อดูและดาวน์โหลดรูปทั้งหมด</p>
+      <button type="button" class="btn btn-secondary" onclick="copyShareText()">คัดลอกลิงก์แกลเลอรี</button>
+    </div>
+  </dialog>
+
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261119-csbxxm-14"></script>
+  <script src="/js/gallery.js?v=20261119-csbxxm-22"></script>
   <script>initGallery()</script>
 </body>
 </html>

@@ -254,8 +254,13 @@ button {
   grid-template-columns: auto auto minmax(220px, 1fr) auto;
   grid-template-areas: "filters time search actions";
   align-items: center;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 12px 16px;
+  margin-bottom: 22px;
+  padding: 14px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, rgba(19,24,34,.96), rgba(13,17,24,.96));
+  box-shadow: var(--shadow-sm);
 }
 
 .filter-tabs {
@@ -454,34 +459,6 @@ button {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   line-height: 1.35;
-}
-
-/* Quick Download Button on Card */
-.card-quick-download {
-  position: absolute;
-  bottom: 42px;
-  right: 10px;
-  z-index: 2;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  background: rgba(10, 13, 18, 0.76);
-  backdrop-filter: blur(10px);
-  border: 1px solid var(--border-medium);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  transition: all 0.2s;
-  opacity: 0.92;
-}
-
-.card-quick-download:hover {
-  background: var(--accent-primary);
-  color: var(--text-inverse);
-  transform: scale(1.1);
-  box-shadow: var(--glow-blue);
 }
 
 /* Multi-Selection Mark */
@@ -700,6 +677,85 @@ button {
   display: flex;
   justify-content: center;
   padding: 0 16px;
+}
+
+.floating-gallery-qr {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: calc(104px + env(safe-area-inset-bottom));
+  z-index: 990;
+  width: 106px;
+  padding: 7px;
+  border: 1px solid rgba(255,255,255,.17);
+  border-radius: 16px;
+  background: rgba(12,16,23,.92);
+  box-shadow: 0 12px 32px rgba(0,0,0,.4);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+.floating-gallery-qr[hidden] { display: none; }
+.floating-gallery-qr-trigger {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  width: 100%;
+  padding: 0;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 700;
+}
+.floating-gallery-qr-trigger img {
+  display: block;
+  width: 88px;
+  height: 88px;
+  padding: 5px;
+  border-radius: 10px;
+  background: #fff;
+  object-fit: contain;
+}
+.floating-gallery-qr-trigger:hover img { box-shadow: 0 0 0 2px var(--accent-primary); }
+
+.gallery-qr-dialog {
+  width: min(390px, calc(100vw - 28px));
+  padding: 0;
+  border: 1px solid var(--border-medium);
+  border-radius: 22px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  box-shadow: var(--shadow-lg);
+}
+.gallery-qr-dialog::backdrop { background: rgba(0,0,0,.72); backdrop-filter: blur(5px); }
+.gallery-qr-dialog-content {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 28px 24px 24px;
+  text-align: center;
+}
+.gallery-qr-dialog-content .section-eyebrow { margin: 0; color: var(--accent-primary); font-size: 11px; font-weight: 800; letter-spacing: .13em; }
+.gallery-qr-dialog-content h2 { margin: 0; font-size: 20px; }
+.gallery-qr-dialog-content > img {
+  width: min(250px, 70vw);
+  height: min(250px, 70vw);
+  padding: 12px;
+  border-radius: 18px;
+  background: #fff;
+  object-fit: contain;
+}
+.gallery-qr-dialog-content > p:not(.section-eyebrow) { margin: 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
+.gallery-qr-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid var(--border-medium);
+  border-radius: 50%;
+  color: var(--text-secondary);
+  background: rgba(255,255,255,.04);
 }
 
 .dock-container {
@@ -950,11 +1006,10 @@ body.slideshow-is-open { overflow: hidden; }
 
 .lightbox-actions {
   display: flex;
-  gap: 10px;
   justify-content: center;
   margin-top: 16px;
-  flex-wrap: wrap;
 }
+.lightbox-actions .btn { min-width: min(260px, 100%); }
 
 /* ==========================================================================
    9. PRIVATE PIN GATE
@@ -1079,13 +1134,11 @@ body.slideshow-is-open { overflow: hidden; }
 
 /* Customer gallery filename search */
 .gallery-search {
-  grid-area: search;
   display: flex;
   align-items: center;
   gap: 9px;
-  flex: 1 1 280px;
-  max-width: 440px;
-  min-width: min(100%, 240px);
+  width: 100%;
+  min-width: 0;
   min-height: 42px;
   padding: 0 12px;
   border: 1px solid var(--border-medium);
@@ -1108,6 +1161,7 @@ body.slideshow-is-open { overflow: hidden; }
   font: inherit;
   font-size: 13px;
 }
+.gallery-search input::-webkit-search-cancel-button { display: none; }
 .gallery-search input::placeholder { color: var(--text-muted); }
 .search-clear {
   padding: 5px 7px;
@@ -1117,12 +1171,18 @@ body.slideshow-is-open { overflow: hidden; }
 }
 .search-clear:hover { background: rgba(255,255,255,.07); color: var(--text-primary); }
 .search-status {
+  display: block;
   min-height: 0;
+  padding: 0 3px;
   color: var(--text-secondary);
-  font-size: 12px;
-  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.3;
 }
 .search-status:empty { display: none; }
+.search-control {
+  grid-area: search;
+  min-width: 0;
+}
 .search-empty {
   grid-column: 1 / -1;
   padding: 34px 16px;
@@ -1148,14 +1208,20 @@ body.slideshow-is-open { overflow: hidden; }
   font-size: 12px;
 }
 .time-filter select {
+  appearance: none;
+  -webkit-appearance: none;
   min-height: 42px;
-  padding: 0 30px 0 12px;
+  padding: 0 36px 0 12px;
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-md);
   background: var(--bg-surface);
   color: var(--text-primary);
   font: inherit;
   font-size: 13px;
+  color-scheme: dark;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath d='m3 5 4 4 4-4' fill='none' stroke='%239aa7b7' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
 }
 .time-filter.is-active select {
   border-color: rgba(56,189,248,.48);
@@ -1167,16 +1233,17 @@ body.slideshow-is-open { overflow: hidden; }
     grid-template-columns: auto auto minmax(0, 1fr);
     grid-template-areas: "filters time actions" "search search search";
   }
-  .gallery-search { max-width: none; }
 }
 @media (max-width: 600px) {
   .gallery-controls {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas: "filters actions" "time time" "search search";
     gap: 9px;
+    padding: 11px;
   }
   .filter-tabs { justify-self: start; }
   .toolbar-actions { justify-self: end; }
   .time-filter { width: 100%; justify-content: space-between; }
   .time-filter select { flex: 1; }
+  .search-status { padding-top: 5px; }
 }
