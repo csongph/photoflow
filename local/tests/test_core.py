@@ -139,3 +139,18 @@ def test_photobooth_uses_orientation_specific_frame(tmp_path: Path):
 
     assert wide.getpixel((400, 200))[0] > wide.getpixel((400, 200))[2]
     assert tall.getpixel((200, 400))[2] > tall.getpixel((200, 400))[0]
+
+
+def test_photobooth_frame_preserves_artwork_aspect_ratio(tmp_path: Path):
+    cache = tmp_path / "CACHE"
+    cache.mkdir()
+    frame = Image.new("RGBA", (600, 300), (255, 0, 0, 255))
+    frame.putpixel((0, 0), (255, 0, 0, 0))
+    frame.save(cache / "photobooth-frame-landscape.png")
+    event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
+
+    result = apply_photobooth_frame(Image.new("RGB", (600, 400), "white"), event)
+
+    assert result.size == (600, 400)
+    assert result.getpixel((0, 0)) == (255, 255, 255)
+    assert result.getpixel((100, 100))[0] > result.getpixel((100, 100))[1]

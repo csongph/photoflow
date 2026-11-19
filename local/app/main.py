@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .database import SessionLocal, init_db
-from .models import Event
+from .models import Event, Photo
 from .queue.worker import JobWorker, recover_jobs
 from .routers import dashboard, diagnostics, events, gallery, google, settings as settings_router
 from .security import auth_enabled, login, login_page, logout, require_admin, valid_session, COOKIE_NAME
@@ -139,18 +139,38 @@ def local_gallery_redirect(public_id: str):
 
 
 @app.get("/media/{event_id}/{variant}/{filename}")
-def media(event_id: str, variant: str, filename: str):
+def media(event_id: str, variant: str, filename: str, request: Request):
     allowed = {"THUMBNAILS", "PREVIEWS", "FINISHED"}
     if variant not in allowed or "/" in filename or "\\" in filename:
         raise HTTPException(404, "Not found")
     with SessionLocal() as db:
         event = db.get(Event, event_id)
-    if not event:
-        raise HTTPException(404, "Not found")
-    root = Path(event.root_path).resolve()
-    path = (root / variant / filename).resolve()
-    if root not in path.parents or not path.exists():
-        raise HTTPException(404, "Not found")
+        if not event:
+            raise HTTPException(404, "Not found")
+        root = Path(event.root_path).resolve()
+        path = (root / variant / filename).resolve()
+        if root not in path.parents or not path.is_file():
+            raise HTTPException(404, "Not found")
+        matching_photos = db.query(Photo).filter(
+            Photo.event_id == event.id,
+            Photo.published == True,
+            Photo.hidden == False,
+        ).all()
+        is_public_photo = any(
+            candidate
+            and Path(candidate).resolve() == path
+            for photo in matching_photos
+            for candidate in [photo.thumbnail_path if variant == "THUMBNAILS" else photo.preview_path if variant == "PREVIEWS" else photo.finished_path]
+        )
+        is_admin = not auth_enabled() or valid_session(request.cookies.get(COOKIE_NAME, ""))
+        if not is_admin and not is_public_photo:
+            raise HTTPException(404, "Not found")
+        if not is_admin:
+            from .routers.gallery import event_by_public_id, has_gallery_access, require_gallery_access
+
+            public_event = event_by_public_id(db, event.public_id)
+            if not has_gallery_access(public_event, request):
+                require_gallery_access(public_event)
     return FileResponse(path, media_type=mimetypes.guess_type(path.name)[0] or "image/jpeg")
 
 

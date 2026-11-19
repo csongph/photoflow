@@ -6,6 +6,7 @@ from pathlib import Path
 from PIL import Image
 from PIL import ImageChops
 from starlette.requests import Request
+from starlette.responses import Response
 
 from local.app.database import Base, SessionLocal, engine, init_db
 from local.app.models import Event, Job, Photo, Setting, Upload
@@ -13,9 +14,10 @@ from local.app.processing.pipeline import process_photo
 from local.app.queue.worker import JobWorker, recover_jobs
 from local.app.queue.worker import drive_filename
 from local.app.routers.events import delete_event, import_cloud_events, import_finished_photos, reprocess_photos, retry_failed_job
-from local.app.routers.events import publish_photo, update_photo_visibility
+from local.app.routers.events import event_gallery_photos, publish_photo, update_photo_visibility
 from local.app.routers.gallery import pin_ok
 from local.app.routers.gallery import photos as gallery_photos
+from local.app.routers.gallery import download_photo as gallery_download_photo
 from local.app.utils.files import sha256_file
 from local.app.uploader.storage import GoogleAuthorizationExpired
 from local.app.watcher.service import IncomingHandler
@@ -423,6 +425,39 @@ def test_gallery_uses_local_media_for_display_and_drive_for_download(tmp_path: P
         assert variants["thumbnail"]["url"].startswith(f"/media/{event.id}/THUMBNAILS/")
         assert variants["preview"]["url"].startswith(f"/media/{event.id}/PREVIEWS/")
         assert variants["finished"]["url"].startswith(f"/api/gallery/{event.public_id}/photos/{photo.id}/download")
+
+
+def test_gallery_downloads_best_available_photo_variant(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    preview = Path(event.root_path) / "PREVIEWS" / "preview-only.jpg"
+    preview.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (120, 80), "purple").save(preview, "JPEG")
+    with SessionLocal() as db:
+        photo = Photo(event_id=event.id, capture_id="preview-only", filename="preview-only.jpg", preview_path=str(preview), checksum=sha256_file(preview), file_size=preview.stat().st_size, status="PUBLISHED", published=True)
+        db.add(photo)
+        db.commit()
+        request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "server": ("localhost", 80), "client": ("localhost", 1), "scheme": "http"})
+        response = gallery_download_photo(event.public_id, photo.id, request=request, response=Response(), db=db)
+        assert Path(response.path) == preview
+        assert response.headers["content-disposition"].endswith('filename="preview-only.jpg"')
+
+
+def test_kiosk_gallery_endpoint_only_returns_visible_published_photos(tmp_path: Path):
+    reset_db()
+    event = make_event(tmp_path)
+    preview = Path(event.root_path) / "PREVIEWS" / "shown.jpg"
+    hidden_preview = Path(event.root_path) / "PREVIEWS" / "hidden.jpg"
+    for path in (preview, hidden_preview):
+        Image.new("RGB", (120, 80), "green").save(path, "JPEG")
+    with SessionLocal() as db:
+        visible = Photo(event_id=event.id, capture_id="shown", filename="shown.jpg", preview_path=str(preview), checksum=sha256_file(preview), file_size=preview.stat().st_size, status="PUBLISHED", published=True)
+        hidden = Photo(event_id=event.id, capture_id="hidden", filename="hidden.jpg", preview_path=str(hidden_preview), checksum=sha256_file(hidden_preview), file_size=hidden_preview.stat().st_size, status="HIDDEN", published=True, hidden=True)
+        db.add_all((visible, hidden))
+        db.commit()
+        request = Request({"type": "http", "method": "GET", "path": "/", "headers": [], "query_string": b"", "server": ("localhost", 80), "client": ("localhost", 1), "scheme": "http"})
+        result = event_gallery_photos(event.id, request=request, page=1, page_size=100, db=db)
+        assert [photo["filename"] for photo in result] == ["shown.jpg"]
 
 
 def test_drive_upload_name_is_flat_inside_root_folder(tmp_path: Path):

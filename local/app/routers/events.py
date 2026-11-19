@@ -8,7 +8,7 @@ from datetime import datetime
 from pathlib import Path
 
 import qrcode
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse
 from PIL import Image
 from io import BytesIO
@@ -19,6 +19,7 @@ from ..config import settings
 from ..database import get_db
 from ..models import Event, Job, Photo, Setting, Upload
 from ..schemas.local import EventCreate, EventOut
+from ..security import COOKIE_NAME, auth_enabled, valid_session
 from ..sync.cloud import CloudSyncError, delete_cloud_event, enabled as cloud_sync_enabled
 from ..utils.files import atomic_json, safe_slug, sha256_file
 from ..utils.local_paths import ensure_event_root
@@ -603,6 +604,43 @@ def event_photos(event_id: str, db: Session = Depends(get_db)):
             "finished": f"/media/{p.event_id}/FINISHED/{Path(p.finished_path).name}" if p.finished_path else "",
         }
         for p in photos
+    ]
+
+
+@router.get("/{event_id}/gallery-photos")
+def event_gallery_photos(event_id: str, request: Request, response: Response = None, page: int = 1, page_size: int = 100, db: Session = Depends(get_db)):
+    """Return only public gallery photos for the local Kiosk slideshow."""
+    from .gallery import event_by_public_id, has_gallery_access, require_gallery_access
+
+    if response:
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    public_event = event_by_public_id(db, event.public_id)
+    is_admin = not auth_enabled() or valid_session(request.cookies.get(COOKIE_NAME, ""))
+    if not is_admin and not has_gallery_access(public_event, request):
+        require_gallery_access(public_event)
+    page = max(1, page)
+    page_size = min(max(1, page_size), 100)
+    rows = (
+        db.query(Photo)
+        .filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False)
+        .order_by(Photo.created_at.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+    return [
+        {
+            "id": photo.id,
+            "filename": photo.filename,
+            "preview": f"/media/{photo.event_id}/PREVIEWS/{Path(photo.preview_path).name}" if photo.preview_path else "",
+            "finished": f"/media/{photo.event_id}/FINISHED/{Path(photo.finished_path).name}" if photo.finished_path else "",
+        }
+        for photo in rows
+        if photo.preview_path or photo.finished_path
     ]
 
 

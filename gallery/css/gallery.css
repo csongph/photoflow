@@ -708,6 +708,70 @@ button {
   font-size: 13px;
 }
 
+.selection-dock {
+  flex-wrap: wrap;
+}
+
+.selection-dock .selection-pill {
+  flex-basis: 100%;
+  text-align: center;
+}
+
+.selection-dock .dock-btn:disabled {
+  opacity: .48;
+  cursor: wait;
+}
+
+.download-fallback-dialog {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(80vh, 720px);
+  padding: 0;
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  background: var(--surface-raised);
+  box-shadow: var(--shadow-lg);
+}
+
+.download-fallback-dialog::backdrop {
+  background: rgba(2, 5, 10, .78);
+  backdrop-filter: blur(6px);
+}
+
+.download-fallback-content {
+  position: relative;
+  padding: 24px;
+}
+
+.download-fallback-content h2 {
+  margin: 14px 0 8px;
+}
+
+.download-fallback-content p {
+  color: var(--text-secondary);
+  line-height: 1.55;
+}
+
+.download-fallback-close {
+  display: flex;
+  margin-left: auto;
+}
+
+.download-fallback-links {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: 48vh;
+  overflow: auto;
+  margin-top: 16px;
+}
+
+.download-fallback-link {
+  justify-content: flex-start;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .selection-pill {
   padding: 6px 14px;
   background: rgba(255, 255, 255, 0.08);

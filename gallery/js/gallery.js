@@ -20,7 +20,8 @@ let galleryUrl = location.href.split("#")[0];
 let galleryMeta = {
   eventName: "CS.BXXM Gallery",
   creditText: "Photo Booth Experience by CS.BXXM STUDIO",
-  reportContact: ""
+  reportContact: "",
+  allowDownload: true
 };
 
 let galleryPhotos = [];
@@ -30,6 +31,12 @@ let touchStartX = 0;
 let touchStartY = 0;
 let selectionMode = false;
 const selectedPhotoIds = new Set();
+const preparedFiles = new Map();
+const preparingPhotoIds = new Set();
+const failedPreparationIds = new Set();
+const preparationControllers = new Map();
+let fallbackObjectUrls = [];
+const MAX_SHARE_SELECTION = 10;
 let sessionStartTime = Date.now();
 
 // Utility Toast
@@ -60,6 +67,12 @@ async function getJson(url) {
   const r = await fetch(url, { cache: "no-store", credentials: "include" });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
+}
+
+function freshDownloadUrl(url) {
+  const result = new URL(url, API);
+  result.searchParams.set("_download", `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`);
+  return result.toString();
 }
 
 // -------------------------------------------------------------------------
@@ -107,7 +120,8 @@ async function initGallery() {
     galleryMeta = {
       eventName,
       creditText: s.credit_text || "Photo Booth Experience by CS.BXXM STUDIO",
-      reportContact: s.report_contact || ""
+      reportContact: s.report_contact || "",
+      allowDownload: Boolean(s.allow_download)
     };
 
     renderGalleryInfo();
@@ -121,6 +135,8 @@ async function initGallery() {
     const allowDl = s.allow_download && !s.locked;
     const dlBtn = document.querySelector("#downloadLinks");
     if (dlBtn) dlBtn.style.display = allowDl ? "inline-flex" : "none";
+    const selectModeBtn = document.querySelector("#selectModeBtn");
+    if (selectModeBtn) selectModeBtn.style.display = allowDl ? "inline-flex" : "none";
 
     const pinPanel = document.querySelector("#pinPanel");
     if (pinPanel) pinPanel.style.display = s.locked ? "flex" : "none";
@@ -229,19 +245,6 @@ async function shareGalleryNative() {
   } else {
     copyShareText();
   }
-}
-
-function downloadAllPhotos(event) {
-  const link = event.currentTarget;
-  if (!knownPhotoCount) {
-    event.preventDefault();
-    showToast("ยังไม่มีรูปให้ดาวน์โหลด", "info");
-    return false;
-  }
-  const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
-  link.href = url.toString();
-  showToast("กำลังเตรียมไฟล์รูปภาพ...", "info");
-  return true;
 }
 
 async function reportIssue() {
@@ -353,11 +356,17 @@ function createPhotoCard(photo) {
   card.innerHTML = `
     ${photo.isRecent ? `<span class="photo-badge-new">NEW</span>` : ""}
     <img src="${photo.thumb || photo.preview}" alt="${safeName}" loading="lazy">
-    <a class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" href="${escapeHtml(new URL(photo.download, API).toString())}" download="${safeName}" target="_blank" rel="noopener" onclick="event.stopPropagation()">
+    ${galleryMeta.allowDownload ? `<a class="card-quick-download" title="ดาวน์โหลดรูปนี้ทันที" href="${escapeHtml(freshDownloadUrl(photo.download))}" download="${safeName}" target="_blank" rel="noopener">
       ↓
-    </a>
+    </a>` : ""}
     <div class="photo-select-mark" aria-hidden="true">✓</div>
   `;
+
+  card.querySelector(".card-quick-download")?.addEventListener("click", event => {
+    event.stopPropagation();
+    event.currentTarget.href = freshDownloadUrl(photo.download);
+    showToast("เริ่มดาวน์โหลดรูปแล้ว", "info");
+  });
 
   card.onclick = () => {
     if (selectionMode) {
@@ -405,7 +414,14 @@ function updateRecentCount() {
 
 function toggleSelectionMode() {
   selectionMode = !selectionMode;
-  if (!selectionMode) selectedPhotoIds.clear();
+  if (!selectionMode) {
+    preparationControllers.forEach(controller => controller.abort());
+    preparationControllers.clear();
+    preparingPhotoIds.clear();
+    selectedPhotoIds.clear();
+    preparedFiles.clear();
+    failedPreparationIds.clear();
+  }
 
   const normalDock = document.querySelector("#normalDock");
   const selectionDock = document.querySelector("#selectionDock");
@@ -432,56 +448,157 @@ function toggleSelectionMode() {
 function togglePhotoSelection(photoId, card) {
   if (selectedPhotoIds.has(photoId)) {
     selectedPhotoIds.delete(photoId);
+    preparedFiles.delete(photoId);
+    failedPreparationIds.delete(photoId);
+    preparationControllers.get(photoId)?.abort();
     card.classList.remove("selected");
   } else {
+    if (selectedPhotoIds.size >= MAX_SHARE_SELECTION) {
+      showToast(`เลือกได้สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง เพื่อบันทึกได้เสถียร`, "info");
+      return;
+    }
     selectedPhotoIds.add(photoId);
     card.classList.add("selected");
+    prepareSelectedPhoto(photoId);
   }
+  updateSelectionControls();
+}
+
+async function prepareSelectedPhoto(photoId) {
+  const photo = galleryPhotos.find(item => item.id === photoId);
+  if (!photo || preparedFiles.has(photoId) || preparingPhotoIds.has(photoId)) return;
+  preparingPhotoIds.add(photoId);
+  failedPreparationIds.delete(photoId);
+  const controller = new AbortController();
+  preparationControllers.set(photoId, controller);
+  updateSelectionControls();
+  try {
+    const response = await fetch(freshDownloadUrl(photo.download), { credentials: "include", cache: "no-store", signal: controller.signal });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const blob = await response.blob();
+    if (!blob.type.startsWith("image/") || !blob.size || blob.size > 40 * 1024 * 1024) throw new Error("ไฟล์รูปใหญ่เกินไปหรือไม่ใช่รูปภาพ");
+    if (selectedPhotoIds.has(photoId)) preparedFiles.set(photoId, new File([blob], photo.filename, { type: blob.type }));
+  } catch (error) {
+    if (error.name !== "AbortError") {
+      console.error("Unable to prepare selected photo", photoId, error);
+      if (selectedPhotoIds.has(photoId)) failedPreparationIds.add(photoId);
+    }
+  } finally {
+    if (preparationControllers.get(photoId) === controller) preparationControllers.delete(photoId);
+    preparingPhotoIds.delete(photoId);
+    updateSelectionControls();
+  }
+}
+
+function selectAllPhotos() {
+  if (!selectionMode) toggleSelectionMode();
+  const cards = [...document.querySelectorAll(".photo-card")];
+  const visibleCards = cards.filter(card => card.offsetParent !== null);
+  const available = visibleCards.filter(card => !selectedPhotoIds.has(card.dataset.id));
+  const room = MAX_SHARE_SELECTION - selectedPhotoIds.size;
+  for (const card of available.slice(0, room)) {
+    selectedPhotoIds.add(card.dataset.id);
+    card.classList.add("selected");
+    prepareSelectedPhoto(card.dataset.id);
+  }
+  if (available.length > room) showToast(`เลือกเพิ่มได้ ${room} รูป · สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง`, "info");
+  updateSelectionControls();
+}
+
+function clearPhotoSelection() {
+  preparationControllers.forEach(controller => controller.abort());
+  preparationControllers.clear();
+  preparingPhotoIds.clear();
+  selectedPhotoIds.clear();
+  preparedFiles.clear();
+  failedPreparationIds.clear();
+  document.querySelectorAll(".photo-card.selected").forEach(card => card.classList.remove("selected"));
   updateSelectionControls();
 }
 
 function updateSelectionControls() {
   const count = selectedPhotoIds.size;
+  const ready = [...selectedPhotoIds].filter(id => preparedFiles.has(id)).length;
+  const preparing = [...selectedPhotoIds].filter(id => preparingPhotoIds.has(id)).length;
+  const failed = [...selectedPhotoIds].filter(id => failedPreparationIds.has(id)).length;
   const countLabel = document.querySelector("#selectedCount");
   const downloadButton = document.querySelector("#downloadSelectedBtn");
 
-  if (countLabel) countLabel.textContent = `เลือก ${count} รูป`;
+  if (countLabel) countLabel.textContent = preparing ? `เตรียมรูป ${ready}/${count}` : `เลือก ${count} รูป`;
   if (downloadButton) {
-    downloadButton.setAttribute("aria-disabled", count === 0 ? "true" : "false");
-    downloadButton.innerHTML = `<span class="btn-icon">↓</span> ดาวน์โหลด ${count} รูป`;
+    downloadButton.disabled = count === 0 || preparing > 0 || (ready !== count && failed === 0);
+    downloadButton.innerHTML = `<span class="btn-icon">↓</span> ${preparing ? `เตรียมรูป ${ready}/${count}` : failed ? `ดาวน์โหลดแยก ${count} รูป` : `แชร์/บันทึก ${count} รูป`}`;
   }
 }
 
 function downloadSelectedPhotos(event) {
-  const link = event.currentTarget;
+  event.preventDefault();
   const photos = [...selectedPhotoIds];
-  if (!photos.length) {
-    event.preventDefault();
-    return false;
+  if (!photos.length) return;
+  if (photos.some(id => !preparedFiles.has(id))) {
+    showDownloadFallback(photos);
+    return;
   }
-
-  if (photos.length === 1) {
-    const photo = galleryPhotos.find(item => item.id === photos[0]);
-    if (!photo) {
-      event.preventDefault();
-      return false;
-    }
-    link.href = new URL(photo.download, API).toString();
-    return true;
+  const files = photos.map(id => preparedFiles.get(id)).filter(Boolean);
+  if (!files.length || files.length !== photos.length) {
+    showDownloadFallback(photos);
+    return;
   }
-
-  if (photos.length > 40) {
-    event.preventDefault();
-    showToast("สามารถเลือกดาวน์โหลดได้ครั้งละไม่เกิน 40 รูป", "info");
-    return false;
+  if (navigator.share && navigator.canShare?.({ files })) {
+    navigator.share({ files, title: galleryMeta.eventName, text: `รูปจากงาน ${galleryMeta.eventName}` })
+      .then(() => showToast(`ส่งรูป ${files.length} รูปไปยังเมนูแชร์แล้ว`, "success"))
+      .catch(error => {
+        if (error.name !== "AbortError") {
+          console.error("Share sheet failed", error);
+          showDownloadFallback(photos, true);
+        }
+      });
+    return;
   }
-
-  const url = new URL(`/api/gallery/${publicId}/downloads.zip`, API);
-  photos.forEach(id => url.searchParams.append("photo_id", id));
-  link.href = url.toString();
-  showToast(`กำลังเตรียมไฟล์ ZIP ${photos.length} รูป...`, "info");
-  return true;
+  showDownloadFallback(photos, true);
 }
+
+function showDownloadFallback(photoIds, startDownloads = false) {
+  const dialog = document.querySelector("#downloadFallbackDialog");
+  const list = document.querySelector("#downloadFallbackLinks");
+  if (!dialog || !list) return;
+  fallbackObjectUrls.forEach(url => URL.revokeObjectURL(url));
+  fallbackObjectUrls = [];
+  const availableIds = photoIds.filter(id => galleryPhotos.some(item => item.id === id));
+  list.innerHTML = availableIds.map(id => {
+    const photo = galleryPhotos.find(item => item.id === id);
+    if (!photo) return "";
+    const file = preparedFiles.get(id);
+    const preparedUrl = file ? URL.createObjectURL(file) : "";
+    if (preparedUrl) fallbackObjectUrls.push(preparedUrl);
+    const href = preparedUrl || freshDownloadUrl(photo.download);
+    return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" target="_blank" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
+  }).join("");
+  if (!dialog.open) dialog.showModal();
+  const message = document.querySelector("#downloadFallbackMessage");
+  const isAppleMobile = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+  if (message) message.textContent = isAppleMobile
+    ? "แตะชื่อรูปเพื่อเปิดหรือดาวน์โหลดทีละรูป หากภาพเปิดขึ้นมา ให้แตะค้างแล้วเลือกบันทึกไปยัง Photos"
+    : startDownloads
+      ? "ระบบจะเริ่มดาวน์โหลดรูปแยกไฟล์ตามที่เบราว์เซอร์อนุญาต หากถูกบล็อก ให้แตะชื่อรูปเพื่อดาวน์โหลดทีละรูป"
+      : "แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์ ระบบไม่สามารถยืนยันการบันทึกลงเครื่องแทนเบราว์เซอร์ได้";
+  if (startDownloads) {
+    window.setTimeout(() => {
+      if (!dialog.open) return;
+      list.querySelectorAll("a").forEach((link, index) => {
+        window.setTimeout(() => link.click(), index * 700);
+      });
+    }, 150);
+    showToast("กำลังเริ่มดาวน์โหลดรูปแยกไฟล์ หากเบราว์เซอร์บล็อก ให้แตะชื่อรูปในรายการ", "info");
+  } else {
+    showToast("แตะชื่อรูปเพื่อดาวน์โหลดแยกไฟล์", "info");
+  }
+}
+
+document.querySelector("#downloadFallbackDialog")?.addEventListener("close", () => {
+  fallbackObjectUrls.forEach(url => URL.revokeObjectURL(url));
+  fallbackObjectUrls = [];
+});
 
 // -------------------------------------------------------------------------
 // LIGHTBOX & MOBILE SHARING
@@ -514,15 +631,20 @@ function openLightbox(index) {
       </div>
 
       <div class="lightbox-actions">
-    <a class="btn btn-primary" href="${escapeHtml(new URL(photo.download, API).toString())}" download="${safeName}" target="_blank" rel="noopener">
+    ${galleryMeta.allowDownload ? `<a class="btn btn-primary" href="${escapeHtml(freshDownloadUrl(photo.download))}" download="${safeName}" target="_blank" rel="noopener">
           <span class="btn-icon">↓</span> บันทึกรูปภาพนี้
-    </a>
+    </a>` : ""}
         <button class="btn btn-secondary" onclick="sharePhotoNative(${index})">
           <span class="btn-icon">↗</span> แชร์รูปนี้ (LINE / IG)
         </button>
       </div>
     </div>
   `;
+
+  modal.querySelector(".lightbox-actions .btn-primary")?.addEventListener("click", event => {
+    event.currentTarget.href = freshDownloadUrl(photo.download);
+    showToast("เริ่มดาวน์โหลดรูปแล้ว", "info");
+  });
 
   modal.classList.add("open");
   document.body.style.overflow = "hidden";
@@ -532,10 +654,21 @@ async function sharePhotoNative(index) {
   const photo = galleryPhotos[index];
   if (!photo) return;
 
+  if (!galleryMeta.allowDownload) {
+    if (navigator.share) {
+      try { await navigator.share({ title: galleryMeta.eventName, text: `ดูรูปจากงาน ${galleryMeta.eventName}`, url: galleryUrl }); }
+      catch (error) { if (error.name !== "AbortError") console.error(error); }
+    } else {
+      await copyShareText();
+    }
+    return;
+  }
+
   if (navigator.share) {
     try {
       // Try sharing as file if supported
-      const response = await fetch(photo.preview);
+      const response = await fetch(freshDownloadUrl(photo.download), { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const blob = await response.blob();
       const file = new File([blob], photo.filename, { type: blob.type });
 
@@ -555,7 +688,7 @@ async function sharePhotoNative(index) {
       await navigator.share({
         title: galleryMeta.eventName,
         text: `ดูรูปของฉันจากงาน ${galleryMeta.eventName}:`,
-        url: photo.finished || galleryUrl
+        url: galleryUrl
       });
     } catch (e) {
       // User cancelled

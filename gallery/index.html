@@ -2,14 +2,14 @@
 <html lang="th">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#0b0f14">
   <meta name="description" content="CS.BXXM STUDIO - Real-time Photo Booth & Event Gallery">
   <title>CS.BXXM STUDIO · Event Gallery</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261026-csbxxm-2">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-10">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -128,9 +128,9 @@
   <aside class="floating-dock" id="floatingDock">
     <div class="dock-container">
       <div id="normalDock" class="dock-row">
-        <a class="btn btn-primary dock-btn" onclick="return downloadAllPhotos(event)" id="downloadLinks" href="#" target="_blank" rel="noopener">
-          <span class="btn-icon">⚡</span> ดาวน์โหลดทั้งหมด
-        </a>
+        <button class="btn btn-primary dock-btn" onclick="toggleSelectionMode()" id="downloadLinks">
+          <span class="btn-icon">✓</span> เลือกรูปเพื่อบันทึก
+        </button>
         <button class="btn btn-secondary dock-btn" onclick="shareGalleryNative()">
           <span class="btn-icon">🔗</span> แชร์แกลเลอรี
         </button>
@@ -138,9 +138,11 @@
 
       <div id="selectionDock" class="dock-row selection-dock" style="display:none">
         <span id="selectedCount" class="selection-pill">เลือก 0 รูป</span>
-        <a id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="return downloadSelectedPhotos(event)" href="#" target="_blank" rel="noopener" aria-disabled="true">
+        <button class="btn btn-secondary dock-btn" onclick="selectAllPhotos()" id="selectAllBtn">เลือกทั้งหมด</button>
+        <button class="btn btn-ghost dock-btn" onclick="clearPhotoSelection()" id="clearSelectionBtn">ล้างที่เลือก</button>
+        <button id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="downloadSelectedPhotos(event)" disabled>
           <span class="btn-icon">↓</span> ดาวน์โหลดที่เลือก
-        </a>
+        </button>
         <button class="btn btn-ghost dock-btn" onclick="toggleSelectionMode()">ยกเลิก</button>
       </div>
     </div>
@@ -149,11 +151,20 @@
   <!-- Interactive Lightbox Modal -->
   <div id="lightbox" class="lightbox-modal" onclick="if(event.target.id==='lightbox') closeLightbox()"></div>
 
+  <dialog id="downloadFallbackDialog" class="download-fallback-dialog">
+    <div class="download-fallback-content">
+      <button class="btn btn-ghost download-fallback-close" onclick="document.querySelector('#downloadFallbackDialog').close()">ปิด ✕</button>
+      <h2>บันทึกรูปภาพแยกไฟล์</h2>
+      <p id="downloadFallbackMessage">อุปกรณ์นี้ไม่รองรับการส่งหลายรูปเข้า Share Sheet พร้อมกัน แตะบันทึกแต่ละรูปได้จากรายการนี้</p>
+      <div id="downloadFallbackLinks" class="download-fallback-links"></div>
+    </div>
+  </dialog>
+
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261030-csbxxm-7"></script>
+  <script src="/js/gallery.js?v=20261119-csbxxm-10"></script>
   <script>initGallery()</script>
 </body>
 </html>

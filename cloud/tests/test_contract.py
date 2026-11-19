@@ -7,7 +7,7 @@ pytestmark = pytest.mark.cloud
 pytest.importorskip("psycopg")
 from cloud.app.main import app
 from cloud.app.models import Event, PhotoVariant
-from cloud.app.routers.gallery import pin_ok, variant_url
+from cloud.app.routers.gallery import finished_variant, pin_ok, variant_url
 from cloud.app.routers.sync import pin_hash, require_sync_token
 
 
@@ -33,6 +33,13 @@ def test_finished_drive_file_uses_image_urls_for_derived_variants():
     assert variant_url(variant, "thumbnail") == "https://drive.google.com/thumbnail?id=drive-file-id&sz=w500"
     assert variant_url(variant, "preview") == "https://drive.google.com/thumbnail?id=drive-file-id&sz=w1600"
     assert variant_url(variant, "finished") == "https://drive.google.com/uc?export=download&id=drive-file-id"
+
+
+def test_cloud_download_fallback_uses_processed_preview_not_original():
+    preview = PhotoVariant(photo_id="photo-id", kind="preview", storage_provider="google_drive", storage_object_id="preview-id")
+    thumbnail = PhotoVariant(photo_id="photo-id", kind="thumbnail", storage_provider="google_drive", storage_object_id="thumbnail-id")
+
+    assert finished_variant([thumbnail, preview]) is preview
 
 
 def test_cloud_gallery_pin_is_hashed_and_checked():

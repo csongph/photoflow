@@ -5,14 +5,13 @@ import hmac
 import os
 import time
 import tempfile
-import zipfile
 from threading import Lock
 from pathlib import Path
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 import httpx
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from sqlalchemy.orm import Session
 import qrcode
@@ -26,7 +25,6 @@ PIN_TTL_SECONDS = 12 * 60 * 60
 PIN_ATTEMPTS = 8
 PIN_WINDOW_SECONDS = 300
 MAX_PHOTO_BYTES = 100 * 1024 * 1024
-MAX_ZIP_BYTES = 250 * 1024 * 1024
 _pin_failures: dict[tuple[str, str], list[float]] = {}
 _pin_failures_lock = Lock()
 
@@ -152,6 +150,14 @@ def photo_download_url(request: Request, public_id: str, photo_id: str, pin: str
     # Keep gallery downloads same-origin so the Vercel API rewrite can proxy
     # them and the browser never needs cross-site CORS for protected media.
     return f"/api/gallery/{public_id}/photos/{photo_id}/download"
+
+
+def finished_variant(rows: list[PhotoVariant]) -> PhotoVariant | None:
+    by_kind = {row.kind: row for row in rows}
+    result = by_kind.get("finished")
+    if result:
+        return result
+    return by_kind.get("preview") or by_kind.get("thumbnail")
 
 
 def variant_url(variant: PhotoVariant, requested_kind: str | None = None) -> str:
@@ -286,30 +292,48 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
         PhotoVariant.photo_id == photo.id,
         PhotoVariant.kind.in_(["finished", "preview", "thumbnail"]),
     ).all()
-    variants_by_kind = {variant.kind: variant for variant in variants}
-    download_variant = next(
-        (variants_by_kind[kind] for kind in ("finished", "preview", "thumbnail") if kind in variants_by_kind),
-        None,
-    )
-    if not download_variant or download_variant.storage_provider != "google_drive" or not download_variant.storage_object_id:
-        raise HTTPException(404, "Download file not found")
+    variants_by_kind = {row.kind: row for row in variants}
+    selected = [variants_by_kind[kind] for kind in ("finished", "preview", "thumbnail") if kind in variants_by_kind]
+    # Finished is the only full-resolution export. Use a smaller processed
+    # preview as a fallback if it is missing; never fall back to the original.
+    if "finished" in variants_by_kind:
+        selected = [variants_by_kind["finished"], *[variants_by_kind[kind] for kind in ("preview", "thumbnail") if kind in variants_by_kind]]
+    else:
+        selected = [variants_by_kind[kind] for kind in ("preview", "thumbnail") if kind in variants_by_kind]
+    download_variants = [variant for variant in selected if variant.storage_provider == "google_drive" and variant.storage_object_id]
+    if not selected or not download_variants:
+        raise HTTPException(404, "No processed photo variant is available")
 
     temp = tempfile.NamedTemporaryFile(prefix="momentlink-photo-", suffix=".jpg", delete=False)
     download_path = temp.name
     temp.close()
     try:
         async with httpx.AsyncClient(follow_redirects=True, timeout=httpx.Timeout(60, connect=15)) as client:
-            async with client.stream("GET", drive_download_url(download_variant.storage_object_id)) as upstream:
-                if upstream.status_code >= 400:
-                    raise HTTPException(502, f"File storage returned HTTP {upstream.status_code}")
-                with open(download_path, "wb") as output:
-                    total_bytes = 0
-                    async for chunk in upstream.aiter_bytes(1024 * 1024):
-                        total_bytes += len(chunk)
-                        if total_bytes > MAX_PHOTO_BYTES:
-                            raise HTTPException(413, "Photo exceeds the 100 MB download limit")
-                        output.write(chunk)
-                content_type = upstream.headers.get("content-type", "application/octet-stream")
+            download_ok = False
+            last_storage_status = 0
+            for variant in download_variants:
+                try:
+                    with open(download_path, "wb") as output:
+                        total_bytes = 0
+                        async with client.stream("GET", drive_download_url(variant.storage_object_id)) as upstream:
+                            last_storage_status = upstream.status_code
+                            if upstream.status_code >= 400 or upstream.headers.get("content-type", "").lower().startswith("text/html"):
+                                continue
+                            async for chunk in upstream.aiter_bytes(1024 * 1024):
+                                total_bytes += len(chunk)
+                                if total_bytes > MAX_PHOTO_BYTES:
+                                    raise HTTPException(413, "Photo exceeds the 100 MB download limit")
+                                output.write(chunk)
+                    with open(download_path, "rb") as downloaded_file:
+                        signature = downloaded_file.read(12)
+                        if signature.startswith(b"\xff\xd8\xff") or signature[4:12] == b"ftypheic" or signature[4:12] == b"ftypheif":
+                            download_ok = True
+                            break
+                except httpx.HTTPError:
+                    continue
+            if not download_ok:
+                detail = f"File storage returned HTTP {last_storage_status}" if last_storage_status >= 400 else "Photo storage did not return a valid image"
+                raise HTTPException(502, detail)
     except HTTPException:
         if os.path.exists(download_path):
             os.unlink(download_path)
@@ -324,96 +348,13 @@ async def download_photo(public_id: str, photo_id: str, request: Request, respon
         raise
 
     filename = quote(photo.filename, safe="")
-    headers = {"Content-Disposition": f"attachment; filename*=UTF-8''{filename}"}
+    ascii_filename = Path(photo.filename).name.encode("ascii", "ignore").decode("ascii") or "photoflow-photo.jpg"
+    headers = {"Content-Disposition": f'attachment; filename="{ascii_filename}"; filename*=UTF-8\'\'{filename}'}
     return FileResponse(
         download_path,
-        media_type=content_type,
+        media_type="image/jpeg",
         headers=headers,
         background=BackgroundTask(os.unlink, download_path),
-    )
-
-
-@router.get("/{public_id}/downloads.zip")
-async def download_selected_photos(
-    public_id: str,
-    request: Request,
-    photo_id: list[str] = Query(default=[]),
-    db: Session = Depends(get_db),
-):
-    selected_ids = list(dict.fromkeys(photo_id))
-    if len(selected_ids) > 40:
-        raise HTTPException(400, "Select no more than 40 photos")
-    event = db.query(Event).filter(Event.public_id == public_id).first()
-    if not event:
-        raise HTTPException(404, "Gallery not found")
-    if not has_gallery_access(event, request):
-        require_gallery_access(event)
-    settings = db.get(GallerySettings, event.id)
-    if settings and not settings.enabled:
-        raise HTTPException(404, "Gallery is closed")
-    if settings and not settings.allow_download:
-        raise HTTPException(403, "Downloads are disabled")
-
-    query = db.query(Photo).filter(
-        Photo.event_id == event.id,
-        Photo.published == True,
-        Photo.hidden == False,
-    )
-    if selected_ids:
-        query = query.filter(Photo.id.in_(selected_ids))
-    rows = query.order_by(Photo.created_at.desc()).all()
-    if not rows:
-        raise HTTPException(404, "No photos are available for download")
-    if selected_ids and len(rows) != len(selected_ids):
-        raise HTTPException(404, "One or more selected photos are unavailable")
-    if not selected_ids:
-        selected_ids = [photo.id for photo in rows]
-    photos_by_id = {photo.id: photo for photo in rows}
-    variants = db.query(PhotoVariant).filter(
-        PhotoVariant.photo_id.in_(selected_ids),
-        PhotoVariant.photo_id.in_(db.query(Photo.id).filter(Photo.event_id == event.id)),
-        PhotoVariant.kind.in_(["finished", "preview", "thumbnail"]),
-    ).all()
-    variants_by_photo: dict[str, PhotoVariant] = {}
-    for variant in variants:
-        current = variants_by_photo.get(variant.photo_id)
-        priority = {"finished": 0, "preview": 1, "thumbnail": 2}
-        if current is None or priority[variant.kind] < priority[current.kind]:
-            variants_by_photo[variant.photo_id] = variant
-    if any(photo_id not in variants_by_photo for photo_id in selected_ids):
-        raise HTTPException(404, "One or more selected photos are not available for download")
-
-    temp = tempfile.NamedTemporaryFile(prefix="momentlink-", suffix=".zip", delete=False)
-    archive_path = temp.name
-    temp.close()
-    try:
-        async with httpx.AsyncClient(follow_redirects=True, timeout=120) as client:
-            with zipfile.ZipFile(archive_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=1) as archive:
-                total_bytes = 0
-                for index, selected_id in enumerate(selected_ids, start=1):
-                    photo = photos_by_id[selected_id]
-                    variant = variants_by_photo[selected_id]
-                    filename = Path(photo.filename).name or f"{photo.id}.jpg"
-                    archive_name = f"{index:02d}_{filename}"
-                    async with client.stream("GET", drive_download_url(variant.storage_object_id)) as upstream:
-                        if upstream.status_code >= 400:
-                            raise HTTPException(502, "Cannot download one or more selected photos from storage")
-                        with archive.open(archive_name, "w") as item:
-                            async for chunk in upstream.aiter_bytes(1024 * 1024):
-                                total_bytes += len(chunk)
-                                if total_bytes > MAX_ZIP_BYTES:
-                                    raise HTTPException(413, "Selected photos exceed the 250 MB ZIP limit")
-                                item.write(chunk)
-    except Exception:
-        if os.path.exists(archive_path):
-            os.unlink(archive_path)
-        raise
-
-    return FileResponse(
-        archive_path,
-        media_type="application/zip",
-        filename="momentlink-photos.zip",
-        background=BackgroundTask(os.unlink, archive_path),
     )
 
 
@@ -431,18 +372,16 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
         raise HTTPException(403, "Downloads are disabled")
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()
     photo_ids = [photo.id for photo in rows]
-    finished_by_photo = {}
+    variants_by_photo: dict[str, list[PhotoVariant]] = {}
     if photo_ids:
-        finished_by_photo = {
-            variant.photo_id: variant
-            for variant in db.query(PhotoVariant).filter(
-                PhotoVariant.photo_id.in_(photo_ids),
-                PhotoVariant.kind == "finished",
-            ).all()
-        }
+        for variant in db.query(PhotoVariant).filter(
+            PhotoVariant.photo_id.in_(photo_ids),
+            PhotoVariant.kind.in_(["finished", "preview", "thumbnail"]),
+        ).all():
+            variants_by_photo.setdefault(variant.photo_id, []).append(variant)
     links = []
     for photo in rows:
-        finished = finished_by_photo.get(photo.id)
+        finished = finished_variant(variants_by_photo.get(photo.id, []))
         if finished:
             links.append({"filename": photo.filename, "url": photo_download_url(request, public_id, photo.id)})
     return {"event": event.name, "gallery_url": public_gallery_url(event.public_id, request), "links": links}

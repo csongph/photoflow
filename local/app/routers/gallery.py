@@ -5,14 +5,12 @@ import hashlib
 import hmac
 import os
 import time
-from tempfile import SpooledTemporaryFile
 from threading import Lock
 from pathlib import Path
-from zipfile import ZIP_DEFLATED, ZipFile
 
 import qrcode
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -26,8 +24,6 @@ PIN_ATTEMPTS = 8
 PIN_WINDOW_SECONDS = 300
 _pin_failures: dict[tuple[str, str], list[float]] = {}
 _pin_failures_lock = Lock()
-
-
 def drive_download_url(file_id: str) -> str:
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
@@ -233,7 +229,11 @@ def download_photo(public_id: str, photo_id: str, request: Request, response: Re
     # A few legacy or partially synced photos may only have a preview. Keep
     # their download button useful by returning the best available image.
     path = next(
-        (Path(candidate) for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path) if candidate),
+        (
+            Path(candidate)
+            for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path)
+            if candidate and Path(candidate).is_file()
+        ),
         None,
     )
     if not path:
@@ -253,79 +253,20 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
     rows = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).order_by(Photo.created_at.desc()).all()
     result = []
     for photo in rows:
-        if not photo.finished_path:
+        path = next(
+            (
+                Path(candidate)
+                for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path)
+                if candidate and Path(candidate).is_file()
+            ),
+            None,
+        )
+        if not path:
             continue
         url = f"/api/gallery/{public_id}/photos/{photo.id}/download"
-        result.append({"filename": Path(photo.finished_path).name, "url": url})
+        result.append({"filename": path.name, "url": url})
     return {
         "event": event.name,
         "gallery_url": public_gallery_url(db, event.public_id),
         "links": result,
     }
-
-
-@router.get("/{public_id}/downloads.zip")
-def download_photos_zip(
-    public_id: str,
-    request: Request,
-    photo_id: list[str] = Query(default=[]),
-    db: Session = Depends(get_db),
-):
-    event = event_by_public_id(db, public_id)
-    if not has_gallery_access(event, request):
-        require_gallery_access(event)
-    if not gallery_settings(event).get("allow_download", True):
-        raise HTTPException(403, "Downloads are disabled")
-    if len(photo_id) > 40:
-        raise HTTPException(400, "สามารถดาวน์โหลดพร้อมกันได้สูงสุด 40 รูป")
-
-    query = db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False)
-    if photo_id:
-        query = query.filter(Photo.id.in_(set(photo_id)))
-    photos = query.order_by(Photo.created_at.desc()).all()
-    archive = SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
-    added = 0
-    try:
-        with ZipFile(archive, "w", compression=ZIP_DEFLATED) as zipped:
-            used_names: set[str] = set()
-            for photo in photos:
-                path = next(
-                    (Path(candidate) for candidate in (photo.finished_path, photo.preview_path, photo.thumbnail_path) if candidate),
-                    None,
-                )
-                if not path:
-                    continue
-                if not path.is_file():
-                    continue
-                name = path.name
-                if name in used_names:
-                    name = f"{photo.id[:8]}_{name}"
-                used_names.add(name)
-                try:
-                    zipped.write(path, arcname=name)
-                except OSError:
-                    continue
-                added += 1
-        if not added:
-            archive.close()
-            raise HTTPException(404, "ยังไม่มีรูปที่ดาวน์โหลดได้")
-        archive.seek(0)
-    except Exception:
-        archive.close()
-        raise
-
-    def stream_archive():
-        try:
-            while chunk := archive.read(1024 * 1024):
-                yield chunk
-        finally:
-            archive.close()
-
-    return StreamingResponse(
-        stream_archive(),
-        media_type="application/zip",
-        headers={
-            "Content-Disposition": 'attachment; filename="photoflow_photos.zip"',
-            "Cache-Control": "no-store",
-        },
-    )

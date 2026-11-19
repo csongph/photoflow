@@ -1,4 +1,5 @@
 const $ = (q) => document.querySelector(q);
+let kioskState = null;
 function showToast(message, tone = "info") {
   let toast = document.querySelector("#appToast");
   if (!toast) {
@@ -117,7 +118,7 @@ async function loadDashboard() {
       <button onclick='navigator.clipboard.writeText(${jsArg(data.active_event.incoming_path)})'>Copy Path</button>
       <button class="secondary" onclick='openFolder(${jsArg(data.active_event.id)})'>Open Folder</button>
       <button class="secondary" onclick='showQr(${jsArg(data.active_event.id)}, ${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Show QR</button>
-      <button class="secondary" onclick='openKioskModal(${jsArg(data.active_event.name)}, "/api/events/" + ${jsArg(data.active_event.id)} + "/qr.png")'>📺 Kiosk Screen</button>
+      <button class="secondary" onclick='openKioskModal(${jsArg(data.active_event.name)}, "/api/events/" + ${jsArg(data.active_event.id)} + "/qr.png", ${jsArg(data.active_event.id)})'>📺 Kiosk Screen</button>
       <button class="secondary" onclick='shareGallery(${jsArg(data.active_event.gallery_url)}, ${jsArg(data.active_event.name)})'>Share Gallery</button>
       <button class="secondary" onclick='rebuildPhotos(${jsArg(data.active_event.id)})'>Rebuild Gallery Files</button>
       <button class="warn" onclick='pause(${jsArg(data.active_event.id)})'>${data.active_event.publishing_paused ? "Resume Publishing" : "Pause Publishing"}</button>
@@ -131,7 +132,8 @@ async function loadDashboard() {
   loadFailedJobs(data.active_event.id);
 }
 
-function openKioskModal(name, qrSrc) {
+async function openKioskModal(name, qrSrc, eventId) {
+  closeKioskModal(false);
   let modal = document.querySelector("#kioskModal");
   if (!modal) {
     modal = document.createElement("div");
@@ -140,22 +142,181 @@ function openKioskModal(name, qrSrc) {
     document.body.appendChild(modal);
   }
   modal.innerHTML = `
-    <div class="kiosk-modal-backdrop" onclick="this.parentElement.remove()"></div>
-    <div class="kiosk-modal-content">
-      <button class="kiosk-close" onclick="this.closest('.kiosk-modal').remove()">✕ ปิดจอ</button>
-      <div class="kiosk-badge">CS.BXXM STUDIO</div>
-      <h2>สแกนเพื่อรับรูปของคุณ</h2>
-      <p class="kiosk-sub">${html(name || "Photo Booth Live Gallery")}</p>
-      <div class="kiosk-qr-wrap">
-        <img src="${qrSrc}" alt="Kiosk QR Code">
+    <div class="kiosk-screen" id="kioskScreen">
+      <div class="kiosk-stage" id="kioskStage" data-transition="fade">
+        <img class="kiosk-slide active" id="kioskSlideA" alt="ภาพจากงาน">
+        <img class="kiosk-slide" id="kioskSlideB" alt="ภาพจากงาน" aria-hidden="true">
+        <div class="kiosk-empty" id="kioskEmpty">กำลังโหลดรูปภาพของงาน…</div>
       </div>
-      <p class="kiosk-hint">เปิดกล้องมือถือแล้วสแกนได้ทันที รูปจะอัปเดตอัตโนมัติ</p>
+      <div class="kiosk-heading"><span>CS.BXXM STUDIO</span><b>${html(name || "Photo Booth Live Gallery")}</b></div>
+      <aside class="kiosk-floating-qr">
+        <div class="kiosk-qr-wrap"><img src="${qrSrc}" alt="QR Code สำหรับเปิดรูปภาพทั้งหมดของงาน"></div>
+        <strong>สแกน QR Code เพื่อดาวน์โหลดรูปภาพ</strong>
+      </aside>
+      <div class="kiosk-controls">
+        <button onclick="closeKioskModal()">ปิดจอ</button>
+        <button onclick="toggleKioskPlayback()" id="kioskPlayButton">พักภาพ</button>
+        <button onclick="stepKiosk(-1)" aria-label="ภาพก่อนหน้า">‹ ก่อนหน้า</button>
+        <button onclick="stepKiosk(1)" aria-label="ภาพถัดไป">ถัดไป ›</button>
+        <label>เปลี่ยนภาพ
+          <select onchange="setKioskTransition(this.value)"><option value="fade">Fade</option><option value="slide">Slide</option><option value="dissolve">Dissolve</option></select>
+        </label>
+        <label>ความเร็ว
+          <select onchange="setKioskInterval(this.value)"><option value="4000">4 วินาที</option><option value="6000" selected>6 วินาที</option><option value="8000">8 วินาที</option><option value="10000">10 วินาที</option></select>
+        </label>
+        <button onclick="toggleKioskFullscreen()" id="kioskFullscreenButton">เต็มจอ</button>
+      </div>
     </div>
   `;
+  const state = { eventId, photos: [], index: 0, paused: false, transition: "fade", refreshTimer: null, slideTimer: null, loading: false, sequence: 0 };
+  kioskState = state;
+  document.body.style.overflow = "hidden";
+  await refreshKioskPhotos();
+  if (kioskState === state) {
+    state.refreshTimer = setInterval(refreshKioskPhotos, 15000);
+    state.slideTimer = setInterval(() => { if (kioskState === state && !state.paused) stepKiosk(1); }, 6000);
+  }
 }
 
+function closeKioskModal(restoreScroll = true) {
+  if (kioskState) {
+    clearInterval(kioskState.refreshTimer);
+    clearInterval(kioskState.slideTimer);
+    kioskState = null;
+  }
+  const modal = document.querySelector("#kioskModal");
+  if (modal) modal.remove();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  if (restoreScroll) document.body.style.overflow = "";
+}
+
+async function refreshKioskPhotos() {
+  if (!kioskState || kioskState.loading) return;
+  kioskState.loading = true;
+  const eventId = kioskState.eventId;
+  try {
+    const photos = [];
+    let page = 1;
+    let rows = [];
+    do {
+      rows = await api(`/api/events/${eventId}/gallery-photos?page=${page}&page_size=100`);
+      if (!kioskState || kioskState.eventId !== eventId) return;
+      photos.push(...rows);
+      page += 1;
+    } while (rows.length === 100);
+    const previousId = kioskState.photos[kioskState.index]?.id;
+    kioskState.photos = photos;
+    const existing = photos.findIndex(photo => photo.id === previousId);
+    kioskState.index = existing >= 0 ? existing : 0;
+    const empty = $("#kioskEmpty");
+    if (empty) empty.hidden = photos.length > 0;
+    if (photos.length) {
+      const activePhoto = photos[kioskState.index];
+      const activeSlide = document.querySelector(".kiosk-slide.active");
+      if (activeSlide?.dataset.photoId !== activePhoto.id) await showKioskPhoto(kioskState.index);
+    }
+  } catch (error) {
+    console.error("Could not refresh Kiosk slideshow", error);
+    const empty = $("#kioskEmpty");
+    if (empty && !kioskState?.photos.length) empty.textContent = "โหลดรูปภาพไม่สำเร็จ กำลังลองใหม่…";
+  } finally {
+    if (kioskState?.eventId === eventId) kioskState.loading = false;
+  }
+}
+
+async function showKioskPhoto(index) {
+  if (!kioskState?.photos.length) return;
+  const state = kioskState;
+  const sequence = ++state.sequence;
+  let photo = null;
+  let source = "";
+  for (let offset = 0; offset < state.photos.length; offset += 1) {
+    const candidate = state.photos[(index + offset + state.photos.length) % state.photos.length];
+    const candidateSource = candidate.preview || candidate.finished;
+    const preload = new Image();
+    preload.src = candidateSource;
+    try {
+      await preload.decode();
+      photo = candidate;
+      source = candidateSource;
+      break;
+    } catch {
+      console.warn("Skipping unavailable Kiosk photo", candidate.id);
+    }
+  }
+  if (!photo) {
+    const empty = $("#kioskEmpty");
+    if (empty) { empty.hidden = false; empty.textContent = "ยังไม่มีรูปภาพที่แสดงได้"; }
+    return;
+  }
+  if (!kioskState || kioskState.sequence !== sequence) return;
+  const empty = $("#kioskEmpty");
+  if (empty) empty.hidden = true;
+  const stage = $("#kioskStage");
+  const active = stage?.querySelector(".kiosk-slide.active");
+  const next = active?.id === "kioskSlideA" ? $("#kioskSlideB") : $("#kioskSlideA");
+  if (!next || !active) return;
+  next.src = source;
+  next.dataset.photoId = photo.id;
+  next.alt = photo.filename || "ภาพจากงาน";
+  next.classList.add("active");
+  active.classList.remove("active");
+  stage.dataset.transition = state.transition;
+  state.index = state.photos.findIndex(item => item.id === photo.id);
+  const following = state.photos[(state.index + 1) % state.photos.length];
+  if (following) { const image = new Image(); image.src = following.preview || following.finished; }
+}
+
+function stepKiosk(direction) {
+  if (!kioskState?.photos.length) return;
+  showKioskPhoto(kioskState.index + direction);
+}
+
+function toggleKioskPlayback() {
+  if (!kioskState) return;
+  kioskState.paused = !kioskState.paused;
+  const button = $("#kioskPlayButton");
+  if (button) button.textContent = kioskState.paused ? "เล่นต่อ" : "พักภาพ";
+}
+
+function setKioskTransition(value) {
+  if (!kioskState || !["fade", "slide", "dissolve"].includes(value)) return;
+  kioskState.transition = value;
+  const stage = $("#kioskStage");
+  if (stage) stage.dataset.transition = value;
+}
+
+function setKioskInterval(value) {
+  if (!kioskState) return;
+  const milliseconds = Number(value);
+  if (![4000, 6000, 8000, 10000].includes(milliseconds)) return;
+  kioskState.interval = milliseconds;
+  clearInterval(kioskState.slideTimer);
+  kioskState.slideTimer = setInterval(() => {
+    if (kioskState && !kioskState.paused) stepKiosk(1);
+  }, milliseconds);
+}
+
+async function toggleKioskFullscreen() {
+  const screen = $("#kioskScreen");
+  try {
+    if (!document.fullscreenElement) await screen?.requestFullscreen();
+    else await document.exitFullscreen();
+  } catch (error) {
+    showToast("เบราว์เซอร์ไม่อนุญาตโหมดเต็มจอ กด F11 เพื่อขยายหน้าต่าง", "info");
+  }
+}
+
+document.addEventListener("keydown", event => {
+  if (!kioskState) return;
+  if (event.key === "Escape") closeKioskModal();
+  else if (event.key === "ArrowRight") stepKiosk(1);
+  else if (event.key === "ArrowLeft") stepKiosk(-1);
+  else if (event.code === "Space") { event.preventDefault(); toggleKioskPlayback(); }
+});
+
 async function showQr(id, url, name = "") {
-  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><button class="button secondary" onclick='openKioskModal(${jsArg(name || "CS.BXXM Studio")}, "/api/events/${id}/qr.png")'>📺 ขยายจอใหญ่ (Kiosk)</button><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', '${name || "CS.BXXM Gallery"}')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
+  $("#qrslot").innerHTML = `<div class="qr-card"><div><p class="kicker">Guest Gallery QR</p><h2>ให้แขกสแกนเพื่อเปิดแกลเลอรี</h2><p class="muted">ลิงก์นี้คือหน้าที่ผู้ใช้ปลายทางเห็นจริง ใช้ทดสอบบนมือถือหรือส่งให้ทีมงานลองดาวน์โหลดรูปได้</p><div class="pathbox">${url}</div><div class="row" style="margin-top:12px"><a class="button" href="${url}" target="_blank">Open Gallery</a><button class="button secondary" onclick='openKioskModal(${jsArg(name || "CS.BXXM Studio")}, "/api/events/${id}/qr.png", ${jsArg(id)})'>📺 ขยายจอใหญ่ (Kiosk)</button><a class="button secondary" href="/api/events/${id}/qr.png" download>Save QR PNG</a><button class="secondary" onclick="navigator.clipboard.writeText('${url}')">Copy Link</button><button class="secondary" onclick="shareGallery('${url}', '${name || "CS.BXXM Gallery"}')">Copy LINE Text</button><button class="secondary" onclick="window.print()">Print</button></div></div><img class="qr" src="/api/events/${id}/qr.png" alt="Gallery QR"></div>`;
 }
 async function loadPreflight(id) {
   const data = await api(`/api/events/${id}/preflight`);
