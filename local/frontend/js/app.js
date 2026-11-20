@@ -143,10 +143,10 @@ async function openKioskModal(name, qrSrc, eventId) {
   }
   modal.innerHTML = `
     <div class="kiosk-screen" id="kioskScreen">
-      <div class="kiosk-stage" id="kioskStage" data-transition="fade">
+      <div class="kiosk-stage" id="kioskStage" data-transition="fade" data-motion="kenburns">
         <img class="kiosk-slide active" id="kioskSlideA" alt="ภาพจากงาน">
         <img class="kiosk-slide" id="kioskSlideB" alt="ภาพจากงาน" aria-hidden="true">
-        <div class="kiosk-empty" id="kioskEmpty">กำลังโหลดรูปภาพของงาน…</div>
+        <div class="kiosk-empty" id="kioskEmpty"><span class="kiosk-empty-mark">LIVE GALLERY</span><b>กำลังเตรียมภาพจากงานนี้</b><span>รูปภาพจะแสดงที่นี่โดยอัตโนมัติ</span></div>
       </div>
       <div class="kiosk-heading"><span>CS.BXXM STUDIO</span><b>${html(name || "Photo Booth Live Gallery")}</b></div>
       <aside class="kiosk-floating-qr">
@@ -161,32 +161,78 @@ async function openKioskModal(name, qrSrc, eventId) {
         <label>เปลี่ยนภาพ
           <select onchange="setKioskTransition(this.value)"><option value="fade">Fade</option><option value="slide">Slide</option><option value="dissolve">Dissolve</option></select>
         </label>
+        <label>การเคลื่อนไหว
+          <select onchange="setKioskMotion(this.value)"><option value="kenburns" selected>ซูมช้า ๆ</option><option value="still">ภาพนิ่ง</option></select>
+        </label>
         <label>ความเร็ว
           <select onchange="setKioskInterval(this.value)"><option value="4000">4 วินาที</option><option value="6000" selected>6 วินาที</option><option value="8000">8 วินาที</option><option value="10000">10 วินาที</option></select>
+        </label>
+        <label>ขนาด QR
+          <select onchange="setKioskQrSize(this.value)"><option value="small">เล็ก</option><option value="medium" selected>ปกติ</option><option value="large">ใหญ่</option></select>
         </label>
         <button onclick="toggleKioskFullscreen()" id="kioskFullscreenButton">เต็มจอ</button>
       </div>
     </div>
   `;
-  const state = { eventId, photos: [], index: 0, paused: false, transition: "fade", refreshTimer: null, slideTimer: null, loading: false, sequence: 0 };
+  const state = { eventId, photos: [], index: 0, paused: false, transition: "fade", motion: "kenburns", qrSize: "medium", interval: 6000, refreshTimer: null, slideTimer: null, loading: false, sequence: 0 };
   kioskState = state;
   document.body.style.overflow = "hidden";
   await refreshKioskPhotos();
   if (kioskState === state) {
     state.refreshTimer = setInterval(refreshKioskPhotos, 15000);
     state.slideTimer = setInterval(() => { if (kioskState === state && !state.paused) stepKiosk(1); }, 6000);
+  setKioskMotion(state.motion);
+  setKioskQrSize(state.qrSize);
   }
 }
 
 function openKioskPage(galleryUrl) {
+  let url;
   try {
-    const url = new URL(galleryUrl, location.origin);
+    url = new URL(galleryUrl, location.origin);
     url.searchParams.set("slideshow", "1");
-    window.open(url.toString(), "_blank", "noopener");
   } catch (error) {
     console.error("Unable to open event slideshow", error);
     showToast("เปิดหน้าแกลเลอรีไม่สำเร็จ ตรวจสอบลิงก์แกลเลอรีของงาน", "error");
+    return;
   }
+
+  // Open synchronously from the user's click so popup blockers allow it.
+  const slideshowWindow = window.open("about:blank", "_blank", "popup=yes,width=1280,height=800");
+  if (!slideshowWindow) {
+    showToast("เบราว์เซอร์บล็อกหน้าต่างสไลด์โชว์ อนุญาต Pop-ups สำหรับเว็บนี้แล้วลองอีกครั้ง", "error");
+    return;
+  }
+
+  try {
+    slideshowWindow.document.title = "กำลังเตรียมสไลด์โชว์";
+    slideshowWindow.document.body.textContent = "กำลังเตรียมหน้าจอสำหรับสไลด์โชว์…";
+  } catch { /* The blank popup may not expose its initial document in some browsers. */ }
+
+  void (async () => {
+    let movedToDisplay = false;
+    try {
+      if (typeof window.getScreenDetails === "function") {
+        const displays = await window.getScreenDetails();
+        const external = displays.screens.find(display => display !== displays.currentScreen);
+        if (external && !slideshowWindow.closed) {
+          slideshowWindow.moveTo(external.availLeft, external.availTop);
+          slideshowWindow.resizeTo(external.availWidth, external.availHeight);
+          movedToDisplay = true;
+        }
+      }
+    } catch (error) {
+      // Permission denied or unsupported: continue with a normal slideshow window.
+      console.info("Secondary display placement unavailable; using a regular slideshow window", error);
+    }
+    if (slideshowWindow.closed) return;
+    slideshowWindow.opener = null;
+    slideshowWindow.location.replace(url.toString());
+    slideshowWindow.focus();
+    showToast(movedToDisplay
+      ? "เปิดสไลด์โชว์บนจอเสริมแล้ว กด “เต็มจอ” ในหน้าสไลด์ได้เลย"
+      : "เปิดสไลด์โชว์แล้ว หากใช้จอเสริมให้ลากหน้าต่างไปจอทีวีแล้วกด “เต็มจอ”", "info");
+  })();
 }
 
 function closeKioskModal(restoreScroll = true) {
@@ -220,16 +266,22 @@ async function refreshKioskPhotos() {
     const existing = photos.findIndex(photo => photo.id === previousId);
     kioskState.index = existing >= 0 ? existing : 0;
     const empty = $("#kioskEmpty");
-    if (empty) empty.hidden = photos.length > 0;
     if (photos.length) {
+      if (empty) empty.hidden = true;
       const activePhoto = photos[kioskState.index];
       const activeSlide = document.querySelector(".kiosk-slide.active");
       if (activeSlide?.dataset.photoId !== activePhoto.id) await showKioskPhoto(kioskState.index);
+    } else if (empty) {
+      empty.hidden = false;
+      empty.innerHTML = '<span class="kiosk-empty-mark">LIVE GALLERY</span><b>พร้อมฉายภาพความทรงจำ</b><span>ภาพใหม่จากงานจะแสดงที่นี่โดยอัตโนมัติ</span>';
     }
   } catch (error) {
     console.error("Could not refresh Kiosk slideshow", error);
     const empty = $("#kioskEmpty");
-    if (empty && !kioskState?.photos.length) empty.textContent = "โหลดรูปภาพไม่สำเร็จ กำลังลองใหม่…";
+    if (empty && !kioskState?.photos.length) {
+      empty.hidden = false;
+      empty.innerHTML = '<span class="kiosk-empty-mark">กำลังเชื่อมต่อ</span><b>กำลังโหลดภาพจากงาน</b><span>ระบบจะลองเชื่อมต่อให้อีกครั้งโดยอัตโนมัติ</span>';
+    }
   } finally {
     if (kioskState?.eventId === eventId) kioskState.loading = false;
   }
@@ -257,7 +309,10 @@ async function showKioskPhoto(index) {
   }
   if (!photo) {
     const empty = $("#kioskEmpty");
-    if (empty) { empty.hidden = false; empty.textContent = "ยังไม่มีรูปภาพที่แสดงได้"; }
+    if (empty) {
+      empty.hidden = false;
+      empty.innerHTML = '<span class="kiosk-empty-mark">LIVE GALLERY</span><b>กำลังรอภาพที่พร้อมแสดง</b><span>ภาพใหม่จะปรากฏที่นี่โดยอัตโนมัติ</span>';
+    }
     return;
   }
   if (!kioskState || kioskState.sequence !== sequence) return;
@@ -273,6 +328,11 @@ async function showKioskPhoto(index) {
   next.classList.add("active");
   active.classList.remove("active");
   stage.dataset.transition = state.transition;
+  stage.dataset.motion = state.motion;
+  stage.style.setProperty("--kiosk-slide-duration", `${state.interval}ms`);
+  const direction = state.sequence % 4;
+  next.style.setProperty("--kenburn-x", direction % 2 ? "-1.5%" : "1.5%");
+  next.style.setProperty("--kenburn-y", direction > 1 ? "-1.5%" : "1.5%");
   state.index = state.photos.findIndex(item => item.id === photo.id);
   const following = state.photos[(state.index + 1) % state.photos.length];
   if (following) { const image = new Image(); image.src = following.preview || following.finished; }
@@ -297,11 +357,26 @@ function setKioskTransition(value) {
   if (stage) stage.dataset.transition = value;
 }
 
+function setKioskMotion(value) {
+  if (!kioskState || !["kenburns", "still"].includes(value)) return;
+  kioskState.motion = value;
+  const stage = $("#kioskStage");
+  if (stage) stage.dataset.motion = value;
+}
+
+function setKioskQrSize(value) {
+  if (!kioskState || !["small", "medium", "large"].includes(value)) return;
+  kioskState.qrSize = value;
+  const screen = $("#kioskScreen");
+  if (screen) screen.dataset.qrSize = value;
+}
+
 function setKioskInterval(value) {
   if (!kioskState) return;
   const milliseconds = Number(value);
   if (![4000, 6000, 8000, 10000].includes(milliseconds)) return;
   kioskState.interval = milliseconds;
+  $("#kioskStage")?.style.setProperty("--kiosk-slide-duration", `${milliseconds}ms`);
   clearInterval(kioskState.slideTimer);
   kioskState.slideTimer = setInterval(() => {
     if (kioskState && !kioskState.paused) stepKiosk(1);
