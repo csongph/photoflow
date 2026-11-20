@@ -49,9 +49,17 @@ const checkLabels = {
 const photoboothThemes = {
   halloween: {
     label: "ฮาโลวีน · Pumpkin Night",
-    portrait: "/frames/halloween-portrait.png?v=3",
-    landscape: "/frames/halloween-landscape.png?v=3"
-  }
+    portrait: "/frames/halloween-portrait.png",
+    landscape: "/frames/halloween-landscape.png"
+  },
+  songkran: { label: "สงกรานต์ · Water Festival" },
+  "loy-krathong": { label: "ลอยกระทง · แสงจันทร์" },
+  "mothers-day": { label: "วันแม่ · ดอกมะลิ" },
+  "fathers-day": { label: "วันพ่อ · โทนเหลือง" },
+  graduation: { label: "รับปริญญา · Navy & Gold" },
+  "new-year": { label: "คริสต์มาส · ปีใหม่" },
+  valentines: { label: "วาเลนไทน์ · Rose" },
+  birthday: { label: "วันเกิด · Celebration" }
 };
 
 function nav(active) {
@@ -448,7 +456,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">PHOTO BOOTH THEME LIBRARY</p><h2>เลือกกรอบและธีม</h2><p class="muted">เลือกธีมที่เตรียมไว้หรืออัปโหลดกรอบ PNG ของคุณเอง แล้วทดลองจัดวางกับรูปก่อนสร้างงาน</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>คลังกรอบเทศกาล</span><select id="frameTheme"><option value="">เลือกกรอบที่เตรียมไว้</option><option value="halloween">ฮาโลวีน · Pumpkin Night</option></select></label><label><span>หรืออัปโหลดกรอบแนวนอน PNG (ไม่เกิน 20 MB)</span><input id="photoboothFrameLandscape" name="photobooth_frame_landscape" type="file" accept="image/png,.png"></label><label><span>หรืออัปโหลดกรอบแนวตั้ง PNG (ไม่เกิน 20 MB)</span><input id="photoboothFramePortrait" name="photobooth_frame_portrait" type="file" accept="image/png,.png"></label><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreview" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างธีม</b><p class="muted">เมื่อเลือกไฟล์กรอบ จะแสดงตัวอย่างซ้อนบนภาพจำลองที่นี่</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">PHOTO BOOTH THEME LIBRARY</p><h2>เลือกกรอบและธีม</h2><p class="muted">เลือกธีมสำเร็จรูป หรืออัปโหลดกรอบ PNG ระบบตรวจแนวตั้ง/แนวนอนและจัดให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>คลังกรอบเทศกาล</span><select id="frameTheme"><option value="">เลือกกรอบที่เตรียมไว้</option><option value="halloween">ฮาโลวีน · Pumpkin Night</option><option value="songkran">สงกรานต์ · Water Festival</option><option value="loy-krathong">ลอยกระทง · แสงจันทร์</option><option value="mothers-day">วันแม่ · ดอกมะลิ</option><option value="fathers-day">วันพ่อ · โทนเหลือง</option><option value="graduation">รับปริญญา · Navy &amp; Gold</option><option value="new-year">คริสต์มาส · ปีใหม่</option><option value="valentines">วาเลนไทน์ · Rose</option><option value="birthday">วันเกิด · Celebration</option></select></label><label><span>อัปโหลดกรอบ PNG (เลือกได้ 1–2 ไฟล์ ระบบตรวจทิศทางให้เอง · ไฟล์ละไม่เกิน 20 MB)</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">กรอบต้องมีช่องโปร่งใสตรงกลาง เพื่อให้เห็นภาพถ่ายด้านใน</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างกรอบอัตโนมัติ</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบหนึ่งหรือสองแนว ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -457,101 +465,208 @@ async function loadEvents() {
     <button>สร้างงานถ่ายภาพ</button>
   </form><section class="panel span-5"><div class="preview-head"><div><h2>งานในระบบ</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">ค้นหางานจากโฟลเดอร์</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
   $("#eventForm").addEventListener("submit", createEvent);
-  $("#photoboothFrameLandscape").addEventListener("change", previewPhotoboothFrame);
-  $("#photoboothFramePortrait").addEventListener("change", previewPhotoboothFrame);
+  $("#photoboothFrameFiles").addEventListener("change", previewPhotoboothFrame);
   $("#frameTheme").addEventListener("change", selectPhotoboothTheme);
   $("#framePreviewPhoto").addEventListener("change", previewFramePhoto);
   ["frameScale", "frameOffsetX", "frameOffsetY"].forEach(id => $("#" + id).addEventListener("input", updateFramePreviewTransform));
   renderEvents();
 }
 
-function previewPhotoboothFrame(ev) {
-  const file = ev.target.files?.[0];
-  $("#frameTheme").value = "";
-  window.activeFrameThemeFiles = null;
-  if (file) $("[name=photobooth_frame_enabled]").checked = true;
-  const preview = $("#frameOverlayPreview");
-  const previewKey = "__frameOverlayPreviewUrl";
-  if (window[previewKey]) URL.revokeObjectURL(window[previewKey]);
-  if (!file) {
-    preview.hidden = true;
-    preview.removeAttribute("src");
-    updateFramePreviewTransform();
-    return;
-  }
-  if (file.type !== "image/png" || !file.name.toLowerCase().endsWith(".png")) {
-    ev.target.value = "";
-    preview.hidden = true;
-    alert("กรุณาเลือกกรอบรูปไฟล์ PNG");
-    return;
-  }
-  window[previewKey] = URL.createObjectURL(file);
-  preview.src = window[previewKey];
-  preview.hidden = false;
-  updateFramePreviewTransform();
+function setFrameAutoStatus(message, isError = false) {
+  const status = $("#frameAutoStatus");
+  if (!status) return;
+  status.textContent = message;
+  status.classList.toggle("frame-auto-error", isError);
+  status.classList.toggle("frame-auto-ready", !isError);
 }
 
-async function selectPhotoboothTheme(ev) {
-  const theme = photoboothThemes[ev.target.value];
-  window.activeFrameThemeFiles = null;
-  if (!theme) {
-    if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
-    window.__frameOverlayPreviewUrl = null;
-    const preview = $("#frameOverlayPreview");
-    preview.removeAttribute("src");
-    preview.hidden = true;
-    $("[name=photobooth_frame_enabled]").checked = Boolean($("#photoboothFrameLandscape").files.length || $("#photoboothFramePortrait").files.length);
+async function inspectPhotoboothFrame(file) {
+  if (file.size > 20 * 1024 * 1024) throw new Error(`${file.name}: ไฟล์ใหญ่เกิน 20 MB`);
+  if (!file.name.toLowerCase().endsWith(".png")) throw new Error(`${file.name}: ชื่อไฟล์ต้องลงท้ายด้วย .png`);
+  const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  if (signature.length !== 8 || signature.some((byte, index) => byte !== [137, 80, 78, 71, 13, 10, 26, 10][index])) {
+    throw new Error(`${file.name}: ไฟล์นี้ไม่ใช่ PNG ที่ถูกต้อง`);
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    if (Math.min(bitmap.width, bitmap.height) < 300 || Math.max(bitmap.width, bitmap.height) > 8000) {
+      throw new Error(`${file.name}: ขนาดภาพต้องอยู่ระหว่าง 300 ถึง 8,000 พิกเซลต่อด้าน`);
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 96;
+    canvas.height = 96;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.clearRect(0, 0, 96, 96);
+    context.drawImage(bitmap, 0, 0, 96, 96);
+    const pixels = context.getImageData(0, 0, 96, 96).data;
+    let transparentSamples = 0;
+    for (let index = 3; index < pixels.length; index += 4) if (pixels[index] < 250) transparentSamples += 1;
+    if (!transparentSamples) throw new Error(`${file.name}: ไม่พบช่องโปร่งใส กรุณาใช้ PNG ที่เจาะช่องกลางไว้`);
+    return { file, width: bitmap.width, height: bitmap.height, orientation: bitmap.width >= bitmap.height ? "landscape" : "portrait" };
+  } finally {
+    bitmap.close();
+  }
+}
+
+function releaseFramePreviewUrls() {
+  (window.__framePreviewUrls || []).forEach(url => URL.revokeObjectURL(url));
+  window.__framePreviewUrls = [];
+  if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
+  window.__frameOverlayPreviewFile = null;
+  window.__frameOverlayPreviewUrl = null;
+}
+
+async function previewPhotoboothFrame(ev) {
+  const input = ev.currentTarget;
+  const token = (window.__frameSelectionToken || 0) + 1;
+  window.__frameSelectionToken = token;
+  window.frameSelectionLoading = true;
+  const files = [...(input.files || [])];
+  $("#frameTheme").value = "";
+  window.activePhotoboothFrames = null;
+  releaseFramePreviewUrls();
+  if (!files.length) {
+    window.frameSelectionLoading = false;
+    $("[name=photobooth_frame_enabled]").checked = false;
+    $("#frameOverlayPreview").hidden = true;
+    setFrameAutoStatus("กรอบต้องมีช่องโปร่งใสตรงกลาง เพื่อให้เห็นภาพถ่ายด้านใน");
+    refreshPhotoboothFramePreview();
+    return;
+  }
+  if (files.length > 2) {
+    window.frameSelectionLoading = false;
+    input.value = "";
+    $("[name=photobooth_frame_enabled]").checked = false;
+    setFrameAutoStatus("เลือกกรอบได้สูงสุด 2 ไฟล์: แนวตั้งหนึ่งไฟล์และแนวนอนหนึ่งไฟล์", true);
     return;
   }
   try {
-    $("#photoboothFrameLandscape").value = "";
-    $("#photoboothFramePortrait").value = "";
-    const files = {};
+    const frames = {};
+    for (const file of files) {
+      const metadata = await inspectPhotoboothFrame(file);
+      if (window.__frameSelectionToken !== token) return;
+      if (frames[metadata.orientation]) throw new Error(`เลือกกรอบ${metadata.orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"}ซ้ำกัน กรุณาเลือกอีกแนวหนึ่ง`);
+      frames[metadata.orientation] = metadata;
+    }
+    window.activePhotoboothFrames = frames;
+    window.frameSelectionLoading = false;
+    $("[name=photobooth_frame_enabled]").checked = true;
+    const summary = Object.values(frames).map(frame => `${frame.orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} ${frame.width} × ${frame.height}`).join(" · ");
+    setFrameAutoStatus(files.length === 1
+      ? `ตรวจพบกรอบ${Object.keys(frames)[0] === "landscape" ? "แนวนอน" : "แนวตั้ง"} (${summary}) · รูปอีกแนวจะคงภาพเดิมเพื่อไม่ให้กรอบผิดสัดส่วน`
+      : `ตรวจพบกรอบครบสองแนว (${summary}) · ระบบจะเลือกให้ตรงกับภาพแต่ละใบ`);
+    refreshPhotoboothFramePreview();
+  } catch (error) {
+    if (window.__frameSelectionToken !== token) return;
+    window.frameSelectionLoading = false;
+    input.value = "";
+    window.activePhotoboothFrames = null;
+    $("[name=photobooth_frame_enabled]").checked = false;
+    setFrameAutoStatus(error.message || "ตรวจสอบกรอบไม่สำเร็จ", true);
+    refreshPhotoboothFramePreview();
+  }
+}
+
+async function selectPhotoboothTheme(ev) {
+  const themeName = ev.currentTarget.value;
+  const token = (window.__frameSelectionToken || 0) + 1;
+  window.__frameSelectionToken = token;
+  const theme = photoboothThemes[themeName];
+  releaseFramePreviewUrls();
+  if (!theme) {
+    await previewPhotoboothFrame({ currentTarget: $("#photoboothFrameFiles") });
+    return;
+  }
+  window.frameSelectionLoading = true;
+  try {
+    $("#photoboothFrameFiles").value = "";
+    window.activePhotoboothFrames = null;
+    $("[name=photobooth_frame_enabled]").checked = false;
+    setFrameAutoStatus(`กำลังเตรียมธีม${theme.label}…`);
+    const frames = {};
     for (const orientation of ["landscape", "portrait"]) {
-      const response = await fetch(theme[orientation]);
+      const source = theme[orientation] || `/api/events/frame-themes/${themeName}/${orientation}.png`;
+      const response = await fetch(source, { cache: "force-cache" });
       if (!response.ok) throw new Error("โหลดไฟล์กรอบไม่สำเร็จ");
       const blob = await response.blob();
-      files[orientation] = new File([blob], `${ev.target.value}-${orientation}.png`, { type: "image/png" });
+      if (window.__frameSelectionToken !== token) return;
+      frames[orientation] = await inspectPhotoboothFrame(new File([blob], `${themeName}-${orientation}.png`, { type: "image/png" }));
     }
-    window.activeFrameThemeFiles = files;
+    if (window.__frameSelectionToken !== token) return;
+    window.activePhotoboothFrames = frames;
+    window.frameSelectionLoading = false;
     $("[name=photobooth_frame_enabled]").checked = true;
-    const sample = $("#frameSample");
-    const [width, height] = sample.style.aspectRatio.split("/").map(Number);
-    const orientation = width && height && width >= height ? "landscape" : "portrait";
-    const preview = $("#frameOverlayPreview");
-    if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
-    window.__frameOverlayPreviewUrl = URL.createObjectURL(files[orientation]);
-    preview.src = window.__frameOverlayPreviewUrl;
-    preview.hidden = false;
-    updateFramePreviewTransform();
+    setFrameAutoStatus("ธีมมีกรอบครบสองแนว ระบบเลือกและจัดให้ตรงกับรูปแต่ละใบแล้ว");
+    refreshPhotoboothFramePreview();
   } catch (err) {
-    ev.target.value = "";
+    if (window.__frameSelectionToken !== token) return;
+    window.frameSelectionLoading = false;
+    ev.currentTarget.value = "";
+    window.activePhotoboothFrames = null;
+    setFrameAutoStatus(err.message || "โหลดชุดกรอบไม่สำเร็จ", true);
     showToast(err.message || "โหลดชุดกรอบไม่สำเร็จ", "error");
   }
 }
 
 function previewFramePhoto(ev) {
-  const file = ev.target.files?.[0];
-  const preview = $("#framePhotoPreview");
+  const file = ev.currentTarget.files?.[0];
+  const preview = $("#framePhotoPreviewImage");
   if (window.__framePhotoPreviewUrl) URL.revokeObjectURL(window.__framePhotoPreviewUrl);
+  window.__framePhotoPreviewUrl = null;
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
+    refreshPhotoboothFramePreview();
     return;
   }
   window.__framePhotoPreviewUrl = URL.createObjectURL(file);
   preview.onload = () => {
     $("#frameSample").style.aspectRatio = `${preview.naturalWidth} / ${preview.naturalHeight}`;
-    const theme = window.activeFrameThemeFiles;
-    if (theme) {
-      const orientation = preview.naturalWidth >= preview.naturalHeight ? "landscape" : "portrait";
-      if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
-      window.__frameOverlayPreviewUrl = URL.createObjectURL(theme[orientation]);
-      $("#frameOverlayPreview").src = window.__frameOverlayPreviewUrl;
-    }
+    refreshPhotoboothFramePreview();
   };
+  preview.onerror = () => setFrameAutoStatus("เปิดภาพตัวอย่างไม่ได้ กรุณาเลือกไฟล์รูปอื่น", true);
   preview.src = window.__framePhotoPreviewUrl;
   preview.hidden = false;
+}
+
+function refreshPhotoboothFramePreview() {
+  const sample = $("#frameSample");
+  const photo = $("#framePhotoPreviewImage");
+  const overlay = $("#frameOverlayPreview");
+  const frames = window.activePhotoboothFrames || {};
+  let orientation;
+  if (photo?.naturalWidth && !photo.hidden) {
+    orientation = photo.naturalWidth >= photo.naturalHeight ? "landscape" : "portrait";
+  } else {
+    orientation = frames.landscape ? "landscape" : frames.portrait ? "portrait" : "landscape";
+    if (frames[orientation]) sample.style.aspectRatio = `${frames[orientation].width} / ${frames[orientation].height}`;
+    else sample.style.aspectRatio = "4 / 3";
+  }
+  const frame = frames[orientation];
+  if (!frame) {
+    overlay.hidden = true;
+    overlay.removeAttribute("src");
+    const label = orientation === "landscape" ? "แนวนอน" : "แนวตั้ง";
+    const other = orientation === "landscape" ? "แนวตั้ง" : "แนวนอน";
+    const status = frames[orientation === "landscape" ? "portrait" : "landscape"]
+      ? `ภาพตัวอย่างเป็น${label} แต่ยังไม่มีกรอบ${label} · เพิ่มกรอบ${label}เพื่อให้พอดีกับภาพ`
+      : `ภาพตัวอย่างเป็น${label} · กรอบ${other}จะไม่ถูกยืดหรือครอปมาใช้ผิดแนว`;
+    const message = $("#framePreviewMessage");
+    if (message) message.textContent = status;
+    return;
+  }
+  if (window.__frameOverlayPreviewFile !== frame.file) {
+    if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
+    window.__frameOverlayPreviewFile = frame.file;
+    window.__frameOverlayPreviewUrl = URL.createObjectURL(frame.file);
+  }
+  overlay.src = window.__frameOverlayPreviewUrl;
+  overlay.hidden = false;
+  const message = $("#framePreviewMessage");
+  if (message) message.textContent = photo?.naturalWidth && !photo.hidden
+    ? `ตัวอย่างภาพ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · ระบบเลือกกรอบที่ตรงแนวให้อัตโนมัติ`
+    : `ตัวอย่างกรอบ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · เลือกรูปจริงเพื่อดูการจัดวางกับภาพของคุณ`;
+  updateFramePreviewTransform();
 }
 
 function updateFramePreviewTransform() {
@@ -571,18 +686,15 @@ async function uploadPhotoboothFrame(eventId, file, orientation) {
 }
 
 async function retryPhotoboothFrame(eventId) {
-  const files = [
-    ["landscape", $("#photoboothFrameLandscape")?.files?.[0]],
-    ["portrait", $("#photoboothFramePortrait")?.files?.[0]],
-  ].filter(([, file]) => file?.size);
-  const file = files[0]?.[1];
-  if (!file) return alert("เลือกไฟล์กรอบ PNG ก่อนลองอีกครั้ง");
+  const files = Object.entries(window.activePhotoboothFrames || {}).map(([orientation, meta]) => [orientation, meta.file]);
+  if (!files.length) return alert("เลือกกรอบ PNG ก่อนลองอีกครั้ง");
   const status = $("#frameUploadResult");
   status.textContent = "กำลังอัปโหลดกรอบ...";
   try {
     const results = await Promise.all(files.map(([orientation, selected]) => uploadPhotoboothFrame(eventId, selected, orientation)));
     const reprocessed = await api(`/api/events/${eventId}/photos/reprocess`, { method: "POST" });
-    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเก่า ${reprocessed.queued} รูปกลับไปประมวลผลแล้ว</div>`;
+    const orientationNote = results.length === 1 ? " · รูปอีกแนวจะแสดงโดยไม่ใส่กรอบเพื่อรักษาสัดส่วน" : "";
+    status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเก่า ${reprocessed.queued} รูปกลับไปประมวลผลแล้ว${orientationNote}</div>`;
   } catch (err) {
     status.innerHTML = `<div class="frame-upload-error">อัปโหลดไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(eventId)})'>ลองอีกครั้ง</button></div>`;
   }
@@ -618,18 +730,26 @@ async function checkPreflightFromList(id) {
 
 async function createEvent(ev) {
   ev.preventDefault();
+  if (window.frameSelectionLoading) {
+    showToast("รอให้ระบบตรวจสอบกรอบเสร็จก่อน แล้วค่อยสร้างงาน", "info");
+    return;
+  }
   const f = new FormData(ev.target);
   const checked = (k) => f.get(k) === "on";
-  let frameFiles = [
-    ["landscape", f.get("photobooth_frame_landscape")],
-    ["portrait", f.get("photobooth_frame_portrait")],
-  ].filter(([, file]) => file instanceof File && file.size);
-  if (!frameFiles.length && window.activeFrameThemeFiles) {
-    frameFiles = Object.entries(window.activeFrameThemeFiles);
-  }
+  let frameFiles = Object.entries(window.activePhotoboothFrames || {}).map(([orientation, meta]) => [orientation, meta.file]);
   const frameEnabled = checked("photobooth_frame_enabled");
   if (frameEnabled && !frameFiles.length) {
-    alert("เลือกกรอบ PNG แนวนอนหรือแนวตั้งอย่างน้อยหนึ่งไฟล์ หรือเอาเครื่องหมายใช้กรอบออก");
+    alert("เลือกธีมสำเร็จรูปหรืออัปโหลดกรอบ PNG อย่างน้อยหนึ่งไฟล์");
+    return;
+  }
+  try {
+    for (const [orientation, file] of frameFiles) {
+      const inspected = await inspectPhotoboothFrame(file);
+      if (inspected.orientation !== orientation) throw new Error(`${file.name}: ทิศทางกรอบเปลี่ยน กรุณาเลือกไฟล์อีกครั้ง`);
+    }
+  } catch (error) {
+    setFrameAutoStatus(error.message || "ตรวจสอบกรอบไม่สำเร็จ", true);
+    showToast(error.message || "ตรวจสอบกรอบไม่สำเร็จ", "error");
     return;
   }
   const payload = {
@@ -643,7 +763,8 @@ async function createEvent(ev) {
     try {
       const results = await Promise.all(frameFiles.map(([orientation, file]) => uploadPhotoboothFrame(event.id, file, orientation)));
       const reprocessed = await api(`/api/events/${event.id}/photos/reprocess`, { method: "POST" });
-      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว</div>`;
+      const orientationNote = results.length === 1 ? " · รูปอีกแนวจะแสดงโดยไม่ใส่กรอบเพื่อรักษาสัดส่วน" : "";
+      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว${orientationNote}</div>`;
     } catch (err) {
       frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
     }

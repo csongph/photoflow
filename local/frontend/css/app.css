@@ -1196,6 +1196,12 @@ textarea { min-height: 100px; }
 .frame-adjustments label { margin: 0; }
 .frame-adjustments output { float: right; color: var(--text); font-variant-numeric: tabular-nums; }
 .frame-adjustments input[type="range"] { padding: 0; accent-color: var(--accent-emerald); }
+.frame-auto-status { padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: rgba(255,255,255,.025); }
+.frame-auto-status.frame-auto-ready { color: #a8e6c3; border-color: rgba(98,214,166,.24); background: rgba(55,139,97,.08); }
+.frame-auto-status.frame-auto-error { color: #ffc4c4; border-color: rgba(241,125,125,.28); background: rgba(158,60,60,.1); }
+.frame-advanced { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 12px; }
+.frame-advanced summary { color: var(--text-secondary); font-size: 13px; font-weight: 700; cursor: pointer; }
+.frame-advanced .frame-adjustments { margin-top: 14px; }
 .frame-upload-success, .frame-upload-error { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; font-size: 13px; }
 .frame-upload-success { color: #b8f1d1; border-color: rgba(98,214,166,.2); background: rgba(55,139,97,.12); }
 .frame-upload-error { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; color: #ffc4c4; border-color: rgba(241,125,125,.22); background: rgba(158,60,60,.12); }

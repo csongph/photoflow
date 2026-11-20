@@ -9,7 +9,7 @@ from pathlib import Path
 
 import qrcode
 from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from PIL import Image
 from io import BytesIO
 from sqlalchemy import func
@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
+from ..frame_themes import THEMES, make_frame_png
 from ..models import Event, Job, Photo, Setting, Upload
 from ..schemas.local import EventCreate, EventOut
 from ..security import COOKIE_NAME, auth_enabled, valid_session
@@ -413,11 +414,25 @@ async def upload_photobooth_frame(
     temp_path.replace(frame_path)
     gallery = gallery_settings(event)
     gallery["photobooth_frame_enabled"] = True
+    gallery["photobooth_frame_auto_orientation"] = True
     event.gallery_json = json.dumps(gallery)
     if cloud_sync_enabled():
         enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
     db.commit()
     return {"ok": True, "orientation": orientation, "filename": frame_path.name, "width": rgba.width, "height": rgba.height}
+
+
+@router.get("/frame-themes/{theme_name}/{orientation}.png")
+def get_photobooth_frame_theme(theme_name: str, orientation: str):
+    if theme_name not in THEMES:
+        raise HTTPException(404, "ไม่พบธีมกรอบนี้")
+    if orientation not in {"portrait", "landscape"}:
+        raise HTTPException(422, "ทิศทางกรอบไม่ถูกต้อง")
+    return Response(
+        content=make_frame_png(theme_name, orientation),
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
 
 
 @router.post("/{event_id}/start")
