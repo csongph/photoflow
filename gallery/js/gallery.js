@@ -85,7 +85,8 @@ function isAppleMobileDevice() {
 }
 
 function isAndroidDevice() {
-  return /Android/i.test(navigator.userAgent);
+  const platform = navigator.userAgentData?.platform || navigator.platform || "";
+  return /Android/i.test(`${navigator.userAgent} ${platform}`) && !isAppleMobileDevice();
 }
 
 // -------------------------------------------------------------------------
@@ -835,68 +836,20 @@ function downloadSelectedPhotos(event) {
 function startAndroidDownloadQueue(photoIds) {
   showDownloadFallback(photoIds, false, true);
   const panel = document.querySelector("#androidDownloadQueue");
-  const progress = document.querySelector("#downloadFallbackProgress");
-  const details = document.querySelector("#downloadIndividualDetails");
   if (!panel) return;
   androidDownloadQueue = {
     photos: photoIds.map(id => galleryPhotos.find(photo => photo.id === id)).filter(Boolean),
     index: 0,
-    status: "preparing",
-    objectUrl: "",
-    controller: null
+    status: "ready",
+    saveAsState: "",
+    saveController: null,
+    saveAsRetryable: false
   };
   panel.hidden = false;
-  if (progress) progress.hidden = true;
+  const details = document.querySelector("#androidDownloadIndividualDetails");
   if (details) details.open = false;
   const fallbackMessage = document.querySelector("#downloadFallbackMessage");
-  if (fallbackMessage) fallbackMessage.textContent = "Android จะดาวน์โหลดทีละรูปไปยัง Downloads แตะปุ่มรูปถัดไปได้ต่อเนื่องโดยไม่ต้องรีเฟรชหน้า";
-  prepareAndroidQueueCurrent();
-}
-
-async function prepareAndroidQueueCurrent() {
-  const queue = androidDownloadQueue;
-  const progress = document.querySelector("#downloadFallbackProgress");
-  const link = document.querySelector("#androidDownloadNextLink");
-  const retry = document.querySelector("#retryAndroidDownloadBtn");
-  if (!queue || queue.index >= queue.photos.length) return updateAndroidDownloadQueue();
-  const photo = queue.photos[queue.index];
-  queue.status = "preparing";
-  queue.controller?.abort();
-  const controller = new AbortController();
-  queue.controller = controller;
-  let timedOut = false;
-  const timeoutId = window.setTimeout(() => {
-    timedOut = true;
-    controller.abort();
-  }, 60000);
-  if (progress) progress.hidden = false;
-  if (link) link.hidden = true;
-  if (retry) retry.hidden = true;
-  updateAndroidDownloadQueue();
-  try {
-    const response = await fetch(freshDownloadUrl(photo.download), {
-      credentials: "include", cache: "no-store", signal: controller.signal
-    });
-    if (!response.ok) throw new Error(`เซิร์ฟเวอร์ส่งสถานะ ${response.status}`);
-    const contentLength = Number(response.headers.get("content-length") || 0);
-    if (contentLength > 40 * 1024 * 1024) throw new Error("รูปมีขนาดเกิน 40 MB");
-    const blob = await response.blob();
-    if (!blob.type.startsWith("image/") || !blob.size || blob.size > 40 * 1024 * 1024) {
-      throw new Error("ไฟล์ไม่ใช่รูปภาพหรือมีขนาดเกิน 40 MB");
-    }
-    if (androidDownloadQueue !== queue || controller.signal.aborted) return;
-    queue.objectUrl = URL.createObjectURL(blob);
-    fallbackObjectUrls.push(queue.objectUrl);
-    queue.status = "ready";
-  } catch (error) {
-    if (androidDownloadQueue !== queue || (error.name === "AbortError" && !timedOut) || queue.controller !== controller) return;
-    console.error("Unable to prepare Android download", photo.id, error);
-    queue.status = "error";
-    queue.error = timedOut ? "เซิร์ฟเวอร์ตอบช้าเกิน 60 วินาที" : error.message || "เตรียมรูปไม่สำเร็จ";
-  } finally {
-    window.clearTimeout(timeoutId);
-    if (queue.controller === controller) queue.controller = null;
-  }
+  if (fallbackMessage) fallbackMessage.textContent = "Android ดาวน์โหลดทีละรูปไปยัง Downloads/Files ตามการตั้งค่าเบราว์เซอร์ แตะรูปถัดไปได้โดยไม่ต้องรีเฟรช หากมีหน้าแจ้งข้อผิดพลาดให้ย้อนกลับแล้วลองรูปนั้นใหม่";
   updateAndroidDownloadQueue();
 }
 
@@ -904,38 +857,222 @@ function updateAndroidDownloadQueue() {
   const queue = androidDownloadQueue;
   const status = document.querySelector("#androidDownloadQueueMessage");
   const link = document.querySelector("#androidDownloadNextLink");
-  const retry = document.querySelector("#retryAndroidDownloadBtn");
-  const progress = document.querySelector("#downloadFallbackProgress");
+  const retry = document.querySelector("#retryAndroidLastLink");
+  const saveAsButton = document.querySelector("#androidSaveAsButton");
+  const saveAsProgress = document.querySelector("#androidSaveAsProgress");
+  const saveAsStatus = document.querySelector("#androidSaveAsStatus");
+  const saveAsRetry = document.querySelector("#androidSaveAsRetry");
   if (!queue || !status || !link) return;
-  if (queue.index >= queue.photos.length) {
-    status.textContent = `ส่งคำขอดาวน์โหลดครบ ${queue.photos.length} รูปแล้ว ตรวจสอบรายการดาวน์โหลดใน Chrome`;
+  const isComplete = queue.index >= queue.photos.length;
+  if (saveAsButton) {
+    saveAsButton.hidden = isComplete || !supportsAndroidSavePicker();
+    saveAsButton.disabled = queue.saveAsState === "saving";
+  }
+  if (saveAsProgress) saveAsProgress.hidden = queue.saveAsState !== "saving";
+  if (saveAsStatus) {
+    saveAsStatus.hidden = !queue.saveAsMessage;
+    saveAsStatus.textContent = queue.saveAsMessage || "";
+  }
+  if (saveAsRetry) saveAsRetry.hidden = !queue.saveAsRetryable;
+  if (retry) {
+    retry.hidden = queue.index === 0;
+    if (queue.index > 0) {
+      const previous = queue.photos[queue.index - 1];
+      retry.href = freshDownloadUrl(previous.download);
+      retry.removeAttribute("download");
+    }
+  }
+  if (isComplete) {
+    status.textContent = `ส่งคำขอดาวน์โหลดครบ ${queue.photos.length} รูปแล้ว ตรวจรายการดาวน์โหลดของเบราว์เซอร์`;
     link.hidden = true;
-    if (retry) retry.hidden = true;
-    if (progress) progress.hidden = true;
     return;
   }
   const photo = queue.photos[queue.index];
-  if (queue.status === "preparing") {
-    status.textContent = `กำลังตรวจและเตรียมรูป ${queue.index + 1} จาก ${queue.photos.length}…`;
+  if (queue.saveAsState === "saving") {
+    status.textContent = `กำลังบันทึก ${photo.filename}…`;
     link.hidden = true;
-    if (retry) retry.hidden = true;
-    if (progress) progress.hidden = false;
     return;
   }
-  if (queue.status === "error") {
-    status.textContent = `เตรียม ${photo.filename} ไม่สำเร็จ (${queue.error}) ตรวจอินเทอร์เน็ตแล้วลองใหม่ได้`;
-    link.hidden = true;
-    if (retry) retry.hidden = false;
-    if (progress) progress.hidden = true;
-    return;
-  }
-  status.textContent = `รูป ${queue.index + 1} จาก ${queue.photos.length} พร้อมแล้ว · แตะบันทึกเพื่อไปต่อ`;
-  if (retry) retry.hidden = true;
-  if (progress) progress.hidden = true;
-  link.href = queue.objectUrl;
-  link.download = photo.filename;
-  link.textContent = `↓ บันทึก ${photo.filename}`;
+  status.textContent = queue.status === "requested"
+    ? `ส่งคำขอรูป ${queue.index + 1} จาก ${queue.photos.length} แล้ว · หากยังไม่พบไฟล์ ให้แตะชื่อรูปด้านล่างอีกครั้ง`
+    : `รูป ${queue.index + 1} จาก ${queue.photos.length} · แตะเพื่อดาวน์โหลด`;
+  link.href = freshDownloadUrl(photo.download);
+  link.removeAttribute("download");
+  link.textContent = `↓ ดาวน์โหลด ${photo.filename}`;
   link.hidden = false;
+}
+
+function supportsAndroidSavePicker() {
+  return isAndroidDevice() && window.isSecureContext === true && typeof window.showSaveFilePicker === "function";
+}
+
+function safeSuggestedPhotoName(filename) {
+  const leafName = String(filename || "photo.jpg").split(/[\\/]/).pop();
+  return leafName.replace(/[<>:"|?*\u0000-\u001f]/g, "_").trim().slice(0, 180) || "photo.jpg";
+}
+
+function isSupportedPhotoSignature(bytes) {
+  if (bytes.length < 12) return false;
+  const starts = (...values) => values.every((value, index) => bytes[index] === value);
+  if (starts(0xff, 0xd8, 0xff)) return true;
+  if (starts(0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a)) return true;
+  if (String.fromCharCode(...bytes.slice(0, 6)) === "GIF87a" || String.fromCharCode(...bytes.slice(0, 6)) === "GIF89a") return true;
+  if (String.fromCharCode(...bytes.slice(0, 4)) === "RIFF" && String.fromCharCode(...bytes.slice(8, 12)) === "WEBP") return true;
+  const brand = String.fromCharCode(...bytes.slice(8, 12)).toLowerCase();
+  return String.fromCharCode(...bytes.slice(4, 8)) === "ftyp" && ["heic", "heif", "mif1", "avif", "avis"].includes(brand);
+}
+
+async function saveAndroidCurrentWithPicker(event) {
+  const queue = androidDownloadQueue;
+  if (!queue || !event.isTrusted || queue.status !== "ready" || queue.saveAsState === "saving" || !supportsAndroidSavePicker()) {
+    event.preventDefault();
+    return;
+  }
+  event.preventDefault();
+  const photo = queue.photos[queue.index];
+  let pickerRequest;
+  try {
+    // Request the save destination before any await so the picker keeps the user's activation.
+    pickerRequest = window.showSaveFilePicker({ suggestedName: safeSuggestedPhotoName(photo.filename) });
+  } catch (error) {
+    queue.saveAsMessage = "เบราว์เซอร์เปิดหน้าต่างเลือกที่เก็บไม่ได้ ใช้ปุ่มดาวน์โหลดปกติได้";
+    queue.saveAsRetryable = false;
+    updateAndroidDownloadQueue();
+    return;
+  }
+
+  queue.saveAsState = "saving";
+  queue.saveAsMessage = "กำลังเปิดตัวเลือกที่เก็บไฟล์…";
+  queue.saveAsRetryable = false;
+  queue.saveController = new AbortController();
+  const controller = queue.saveController;
+  updateAndroidDownloadQueue();
+  void streamAndroidPhotoToFile(queue, photo, pickerRequest, controller);
+}
+
+async function streamAndroidPhotoToFile(queue, photo, pickerRequest, controller) {
+  let writable = null;
+  let reader = null;
+  let timeoutId = null;
+  let timedOut = false;
+  const startIdleTimeout = () => {
+    window.clearTimeout(timeoutId);
+    timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 120000);
+  };
+  try {
+    const fileHandle = await pickerRequest;
+    if (androidDownloadQueue !== queue) return;
+    startIdleTimeout();
+    queue.saveAsMessage = `กำลังรับรูป ${photo.filename}…`;
+    updateAndroidDownloadQueue();
+    const response = await fetch(freshDownloadUrl(photo.download), {
+      credentials: "include", cache: "no-store", signal: controller.signal
+    });
+    if (!response.ok) {
+      const error = new Error(`HTTP ${response.status}`);
+      error.httpStatus = response.status;
+      throw error;
+    }
+    const contentType = (response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+    if (!contentType.startsWith("image/") && contentType !== "application/octet-stream") {
+      throw new Error("เซิร์ฟเวอร์ไม่ได้ส่งไฟล์รูปภาพ");
+    }
+    const expectedBytes = Number(response.headers.get("content-length") || 0);
+    const progress = document.querySelector("#androidSaveAsProgress");
+    if (progress) {
+      progress.max = 100;
+      if (expectedBytes) progress.value = 0;
+      else progress.removeAttribute("value");
+    }
+    reader = response.body?.getReader();
+    if (!reader) throw new Error("เบราว์เซอร์อ่านข้อมูลไฟล์ไม่ได้");
+    writable = await fileHandle.createWritable();
+    let receivedBytes = 0;
+    const prefix = new Uint8Array(12);
+    let prefixLength = 0;
+    let lastUiUpdate = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      startIdleTimeout();
+      if (!value?.byteLength) continue;
+      const prefixCount = Math.min(prefix.length - prefixLength, value.byteLength);
+      if (prefixCount > 0) {
+        prefix.set(value.subarray(0, prefixCount), prefixLength);
+        prefixLength += prefixCount;
+      }
+      receivedBytes += value.byteLength;
+      if (prefixLength === prefix.length && !isSupportedPhotoSignature(prefix)) {
+        await reader.cancel();
+        throw new Error("ไฟล์ที่ได้รับไม่ใช่รูปภาพที่เปิดได้");
+      }
+      await writable.write(value);
+      const now = Date.now();
+      if (now - lastUiUpdate > 250) {
+        const percent = expectedBytes ? Math.min(100, Math.floor(receivedBytes / expectedBytes * 100)) : null;
+        queue.saveAsMessage = percent === null
+          ? `กำลังบันทึก ${photo.filename} · ${Math.ceil(receivedBytes / 1024 / 1024)} MB`
+          : `กำลังบันทึก ${photo.filename} · ${percent}%`;
+        if (progress && percent !== null) progress.value = percent;
+        lastUiUpdate = now;
+        updateAndroidDownloadQueue();
+      }
+    }
+    if (!receivedBytes || prefixLength < prefix.length || !isSupportedPhotoSignature(prefix)) {
+      throw new Error("ไฟล์ว่างหรือข้อมูลรูปภาพไม่ครบ");
+    }
+    await writable.close();
+    writable = null;
+    if (androidDownloadQueue !== queue) return;
+    queue.index += 1;
+    queue.status = "ready";
+    queue.saveAsState = "";
+    queue.saveAsMessage = `บันทึก ${photo.filename} เรียบร้อย`;
+    queue.saveAsRetryable = false;
+    showToast(`บันทึก ${photo.filename} แล้ว`, "success");
+  } catch (error) {
+    if (writable) {
+      try { await writable.abort(); } catch { /* Best effort: discard incomplete file. */ }
+    }
+    if (androidDownloadQueue !== queue) return;
+    queue.saveAsState = error.name === "AbortError" && !timedOut ? "cancelled" : "error";
+    queue.saveAsRetryable = timedOut || error.name === "TypeError" || error.httpStatus === 408 || error.httpStatus === 429 || error.httpStatus >= 500;
+    if (error.name === "AbortError" && !timedOut) {
+      queue.saveAsMessage = "ยกเลิกการเลือกที่เก็บ ยังไม่มีการบันทึกรูป";
+    } else if (error.httpStatus === 401) {
+      queue.saveAsMessage = "เซสชันหมดอายุ กรุณาเปิดแกลเลอรีจาก QR อีกครั้ง";
+    } else if (error.httpStatus === 403) {
+      queue.saveAsMessage = "แกลเลอรีนี้ปิดการดาวน์โหลดไว้";
+    } else if (error.httpStatus === 404) {
+      queue.saveAsMessage = "ไม่พบรูปนี้แล้ว กรุณาเลือกภาพอื่น";
+    } else if (error.httpStatus === 429) {
+      queue.saveAsMessage = "มีคำขอจำนวนมาก รอสักครู่แล้วลองรูปนี้ใหม่";
+    } else if (timedOut || error.name === "TypeError" || error.httpStatus >= 500 || error.httpStatus === 408) {
+      queue.saveAsMessage = "การเชื่อมต่อสะดุดหรือเซิร์ฟเวอร์ไม่พร้อม ลองบันทึกรูปนี้ใหม่ได้";
+    } else {
+      queue.saveAsMessage = error.message || "บันทึกรูปไม่สำเร็จ ใช้ปุ่มดาวน์โหลดปกติได้";
+    }
+    console.error("Android save picker failed", photo.id, error);
+  } finally {
+    window.clearTimeout(timeoutId);
+    if (reader) reader.releaseLock();
+    if (queue.saveController === controller) queue.saveController = null;
+    updateAndroidDownloadQueue();
+  }
+}
+
+function retryAndroidSaveAs(event) {
+  if (!androidDownloadQueue?.saveAsRetryable) {
+    event.preventDefault();
+    return;
+  }
+  androidDownloadQueue.saveAsState = "";
+  androidDownloadQueue.saveAsMessage = "";
+  androidDownloadQueue.saveAsRetryable = false;
+  saveAndroidCurrentWithPicker(event);
 }
 
 function advanceAndroidDownloadQueue(event) {
@@ -944,30 +1081,31 @@ function advanceAndroidDownloadQueue(event) {
     event.preventDefault();
     return;
   }
-  const downloadedUrl = queue.objectUrl;
-  queue.objectUrl = "";
-  fallbackObjectUrls = fallbackObjectUrls.filter(url => url !== downloadedUrl);
-  queue.status = "sent";
+  queue.status = "requested";
   const status = document.querySelector("#androidDownloadQueueMessage");
-  if (status) status.textContent = `ส่งคำขอรูป ${queue.index + 1} จาก ${queue.photos.length} ไปยัง Chrome แล้ว กำลังเตรียมรูปถัดไป…`;
+  if (status) status.textContent = `ส่งคำขอรูป ${queue.index + 1} จาก ${queue.photos.length} แล้ว กำลังเปิดรูปถัดไป…`;
   window.setTimeout(() => {
     if (androidDownloadQueue !== queue) return;
     queue.index += 1;
-    queue.status = "preparing";
-    prepareAndroidQueueCurrent();
+    queue.status = "ready";
+    updateAndroidDownloadQueue();
   }, 450);
-  window.setTimeout(() => {
-    if (downloadedUrl) URL.revokeObjectURL(downloadedUrl);
-  }, 30000);
 }
 
-function retryAndroidQueueCurrent() {
-  if (androidDownloadQueue?.status === "error") prepareAndroidQueueCurrent();
+function refreshAndroidRetryUrl(event) {
+  const queue = androidDownloadQueue;
+  if (!queue || !event.isTrusted || queue.index < 1) {
+    event.preventDefault();
+    return;
+  }
+  const previousPhoto = queue.photos[queue.index - 1];
+  event.currentTarget.href = freshDownloadUrl(previousPhoto.download);
 }
 
 function showDownloadFallback(photoIds, startDownloads = false, silent = false) {
   const dialog = document.querySelector("#downloadFallbackDialog");
-  const list = document.querySelector("#downloadFallbackLinks");
+  const isAndroid = isAndroidDevice();
+  const list = document.querySelector(isAndroid ? "#androidDownloadFallbackLinks" : "#downloadFallbackLinks");
   if (!dialog || !list) return;
   fallbackObjectUrls.forEach(url => URL.revokeObjectURL(url));
   fallbackObjectUrls = [];
@@ -979,7 +1117,8 @@ function showDownloadFallback(photoIds, startDownloads = false, silent = false) 
     const preparedUrl = file ? URL.createObjectURL(file) : "";
     if (preparedUrl) fallbackObjectUrls.push(preparedUrl);
     const href = preparedUrl || freshDownloadUrl(photo.download);
-    return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}" download="${escapeHtml(photo.filename)}" rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
+    const downloadAttribute = isAndroid ? "" : ` download="${escapeHtml(photo.filename)}"`;
+    return `<a class="btn btn-primary download-fallback-link" href="${escapeHtml(href)}"${downloadAttribute} rel="noopener"><span>↓</span>${escapeHtml(photo.filename)}</a>`;
   }).join("");
   list.querySelectorAll("a").forEach((link, index) => {
     const photo = galleryPhotos.find(item => item.id === availableIds[index]);
@@ -989,12 +1128,18 @@ function showDownloadFallback(photoIds, startDownloads = false, silent = false) 
   });
   const message = document.querySelector("#downloadFallbackMessage");
   const progress = document.querySelector("#downloadFallbackProgress");
-  const details = document.querySelector("#downloadIndividualDetails");
+  const desktopAppleDetails = document.querySelector("#downloadIndividualDetails");
+  const androidDetails = document.querySelector("#androidDownloadIndividualDetails");
+  if (desktopAppleDetails) desktopAppleDetails.hidden = isAndroid;
+  if (androidDetails) {
+    androidDetails.hidden = !isAndroid;
+    if (isAndroid) androidDetails.open = false;
+  }
   if (message) message.textContent = startDownloads
     ? `กำลังเริ่มดาวน์โหลดรูปแยก ${availableIds.length} ไฟล์ หาก Chrome ถาม ให้กดอนุญาตดาวน์โหลดหลายไฟล์ แล้วตรวจรายการดาวน์โหลดของเบราว์เซอร์`
     : "แตะชื่อไฟล์ด้านล่างเพื่อดาวน์โหลด ระบบจะบันทึกผ่านเบราว์เซอร์ไปยัง Downloads หรือ Files";
   if (progress) progress.hidden = !startDownloads;
-  if (startDownloads && details) details.open = true;
+  if (startDownloads && desktopAppleDetails) desktopAppleDetails.open = true;
   if (startDownloads) {
     // Trigger every file in the original user gesture so browsers can show
     // their native permission prompt for multiple downloads.
@@ -1009,7 +1154,7 @@ function showDownloadFallback(photoIds, startDownloads = false, silent = false) 
 }
 
 document.querySelector("#downloadFallbackDialog")?.addEventListener("close", () => {
-  androidDownloadQueue?.controller?.abort();
+  androidDownloadQueue?.saveController?.abort();
   fallbackObjectUrls.forEach(url => URL.revokeObjectURL(url));
   fallbackObjectUrls = [];
   androidDownloadQueue = null;

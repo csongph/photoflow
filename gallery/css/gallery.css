@@ -884,9 +884,14 @@ button {
 }
 
 .android-download-queue { display: grid; gap: 12px; margin-top: 18px; padding: 16px; border: 1px solid var(--border-medium); border-radius: 16px; background: rgba(255,255,255,.035); }
+.android-download-queue [hidden] { display: none !important; }
 .android-download-queue p { margin: 0; color: var(--text-secondary); font-size: 14px; }
 .android-download-queue .download-fallback-link { width: 100%; min-height: 48px; }
-.android-download-queue #retryAndroidDownloadBtn { width: 100%; min-height: 44px; }
+.android-download-queue #retryAndroidLastLink { min-height: 42px; }
+.android-download-queue #androidSaveAsButton,
+.android-download-queue #androidSaveAsRetry { width: 100%; min-height: 42px; white-space: normal; }
+.android-download-queue .android-save-progress { width: 100%; height: 7px; accent-color: var(--accent-primary); }
+.android-download-queue .android-save-status { font-size: 12px; line-height: 1.5; }
 .download-individual-details { margin-top: 16px; border-top: 1px solid var(--border-medium); padding-top: 12px; }
 .download-individual-details summary { color: var(--text-secondary); font-size: 13px; font-weight: 700; cursor: pointer; }
 .download-individual-details .download-fallback-links { margin-top: 12px; }

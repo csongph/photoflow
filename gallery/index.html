@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261119-csbxxm-25">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261120-csbxxm-27">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -185,11 +185,19 @@
       <section id="androidDownloadQueue" class="android-download-queue" hidden>
         <p id="androidDownloadQueueMessage"></p>
         <a id="androidDownloadNextLink" class="btn btn-primary download-fallback-link" href="#" onclick="advanceAndroidDownloadQueue(event)"></a>
-        <button id="retryAndroidDownloadBtn" class="btn btn-secondary" type="button" onclick="retryAndroidQueueCurrent()" hidden>ลองเตรียมรูปนี้อีกครั้ง</button>
+        <button id="androidSaveAsButton" class="btn btn-secondary" type="button" onclick="saveAndroidCurrentWithPicker(event)" hidden>เลือกที่เก็บและบันทึก</button>
+        <progress id="androidSaveAsProgress" class="android-save-progress" max="100" hidden></progress>
+        <p id="androidSaveAsStatus" class="android-save-status" aria-live="polite" hidden></p>
+        <button id="androidSaveAsRetry" class="btn btn-ghost" type="button" onclick="retryAndroidSaveAs(event)" hidden>ลองบันทึกรูปนี้อีกครั้ง</button>
+        <a id="retryAndroidLastLink" class="btn btn-secondary download-fallback-link" href="#" onclick="refreshAndroidRetryUrl(event)" hidden>ลองดาวน์โหลดรูปก่อนหน้าอีกครั้ง</a>
       </section>
       <details id="downloadIndividualDetails" class="download-individual-details">
         <summary>ดาวน์โหลดรูปแยกเอง</summary>
         <div id="downloadFallbackLinks" class="download-fallback-links"></div>
+      </details>
+      <details id="androidDownloadIndividualDetails" class="download-individual-details" hidden>
+        <summary>ดาวน์โหลดรูปแยกเอง</summary>
+        <div id="androidDownloadFallbackLinks" class="download-fallback-links"></div>
       </details>
     </div>
   </dialog>
@@ -208,7 +216,7 @@
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261119-csbxxm-28"></script>
+  <script src="/js/gallery.js?v=20261120-csbxxm-30"></script>
   <script>initGallery()</script>
 </body>
 </html>
