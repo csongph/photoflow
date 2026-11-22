@@ -68,45 +68,25 @@ def _frame_aperture(frame: Image.Image) -> tuple[int, int, int, int] | None:
     if not candidates:
         return None
     sx, sy = min(candidates, key=lambda point: (point[0] - width / 2) ** 2 + (point[1] - height / 2) ** 2)
-    # Find the largest clear rectangle containing the center seed. The bounding
-    # box of a transparent opening can include side ghosts or ornaments; fitting
-    # into an actually clear rectangle prevents those decorations covering a
-    # person near the edge of the photo.
-    row_spans: list[tuple[int, int] | None] = []
-    for y in range(height):
-        if values[y * width + sx] >= 40:
-            row_spans.append(None)
-            continue
-        left = sx
-        right = sx + 1
-        while left > 0 and values[y * width + left - 1] < 40:
-            left -= 1
-        while right < width and values[y * width + right] < 40:
-            right += 1
-        row_spans.append((left, right))
-    best_area = 0
-    best_box = None
-    for top in range(sy, -1, -1):
-        if row_spans[top] is None:
-            break
-        clear_left, clear_right = row_spans[top]
-        for bottom in range(sy, height):
-            span = row_spans[bottom]
-            if span is None:
-                break
-            clear_left = max(clear_left, span[0])
-            clear_right = min(clear_right, span[1])
-            area = (clear_right - clear_left) * (bottom - top + 1)
-            if area > best_area:
-                best_area = area
-                best_box = (clear_left, top, clear_right, bottom + 1)
-    if best_box is None:
-        return None
-    min_x, min_y, max_x, max_y = best_box
-    # Convert the safe opening rectangle to source resolution and inset from
-    # antialiased edges for a small additional safety margin.
+    # Bound the connected transparent opening around the center. Using only
+    # the largest clear rectangle leaves too much of the real photo opening
+    # empty, especially near the lower edge of portrait frames.
+    queue = [(sx, sy)]
+    seen = {sy * width + sx}
+    min_x = max_x = sx
+    min_y = max_y = sy
+    for x, y in queue:
+        min_x, max_x = min(min_x, x), max(max_x, x)
+        min_y, max_y = min(min_y, y), max(max_y, y)
+        for nx, ny in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+            key = ny * width + nx
+            if 0 <= nx < width and 0 <= ny < height and key not in seen and values[key] < 40:
+                seen.add(key)
+                queue.append((nx, ny))
+    # Convert the opening bounds to source resolution and leave a thin inset
+    # from antialiased decoration edges.
     sx_scale, sy_scale = frame.width / width, frame.height / height
-    inset_x, inset_y = max(2, round((max_x - min_x + 1) * sx_scale * .025)), max(2, round((max_y - min_y + 1) * sy_scale * .025))
+    inset_x, inset_y = max(2, round((max_x - min_x + 1) * sx_scale * .012)), max(2, round((max_y - min_y + 1) * sy_scale * .012))
     box = (
         max(0, round(min_x * sx_scale) + inset_x),
         max(0, round(min_y * sy_scale) + inset_y),

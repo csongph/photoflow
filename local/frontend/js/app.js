@@ -848,26 +848,20 @@ function getFrameOpening(image) {
       }
     }
     if (!seed) return null;
-    const spans = Array.from({ length: 96 }, (_, y) => {
-      if (alpha(seed[0], y) >= 40) return null;
-      let left = seed[0], right = seed[0] + 1;
-      while (left > 0 && alpha(left - 1, y) < 40) left--;
-      while (right < 96 && alpha(right, y) < 40) right++;
-      return [left, right];
-    });
-    let bestArea = 0, best = null;
-    for (let top = seed[1]; top >= 0 && spans[top]; top--) {
-      let left = spans[top][0], right = spans[top][1];
-      for (let bottom = seed[1]; bottom < 96 && spans[bottom]; bottom++) {
-        left = Math.max(left, spans[bottom][0]); right = Math.min(right, spans[bottom][1]);
-        const area = (right - left) * (bottom - top + 1);
-        if (area > bestArea) { bestArea = area; best = [left, top, right, bottom + 1]; }
+    const queue = [seed], seen = new Set([seed[1] * 96 + seed[0]]);
+    let minX = seed[0], maxX = seed[0], minY = seed[1], maxY = seed[1];
+    for (let i = 0; i < queue.length; i++) {
+      const [x, y] = queue[i];
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+      for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
+        const key = ny * 96 + nx;
+        if (nx >= 0 && ny >= 0 && nx < 96 && ny < 96 && !seen.has(key) && alpha(nx, ny) < 40) { seen.add(key); queue.push([nx, ny]); }
       }
     }
-    if (!best) return null;
-    const insetX = Math.max(1, (best[2] - best[0]) * .025), insetY = Math.max(1, (best[3] - best[1]) * .025);
-    best[0] += insetX; best[2] -= insetX; best[1] += insetY; best[3] -= insetY;
-    return { x: best[0] / 96 * 100, y: best[1] / 96 * 100, width: (best[2] - best[0]) / 96 * 100, height: (best[3] - best[1]) / 96 * 100 };
+    const insetX = Math.max(1, (maxX - minX + 1) * .012), insetY = Math.max(1, (maxY - minY + 1) * .012);
+    minX += insetX; maxX += 1 - insetX; minY += insetY; maxY += 1 - insetY;
+    return { x: minX / 96 * 100, y: minY / 96 * 100, width: (maxX - minX) / 96 * 100, height: (maxY - minY) / 96 * 100 };
   } catch (_) { return null; }
 }
 
