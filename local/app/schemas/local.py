@@ -16,6 +16,7 @@ class GallerySettings(BaseModel):
     photobooth_frame_scale: float = 1.0
     photobooth_frame_x: float = 0.0
     photobooth_frame_y: float = 0.0
+    card_maker_enabled: bool = False
 
 
 class DriveSettings(BaseModel):

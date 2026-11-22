@@ -2,14 +2,17 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import re
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
+from PIL import Image
+from io import BytesIO
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..models import Event, FaceSearchSession, GallerySettings, Photo, PhotoFace, PhotoVariant, SyncJob
+from ..models import CardTemplate, Event, FaceSearchSession, GallerySettings, Photo, PhotoFace, PhotoStripAsset, PhotoVariant, SyncJob
 
 router = APIRouter(prefix="/api/sync", tags=["sync"])
 
@@ -28,6 +31,10 @@ def event_out(event: Event, settings: GallerySettings | None, *, include_photos:
             "auto_refresh": settings.auto_refresh if settings else True,
             "credit_text": settings.credit_text if settings else "",
             "report_contact": settings.report_contact if settings else "",
+            "card_maker_enabled": bool(settings.card_maker_enabled and settings.card_template_name) if settings else False,
+            "card_template_name": settings.card_template_name if settings else "",
+            "photo_strip_enabled": bool(settings.photo_strip_enabled) if settings else False,
+            "photo_strip": _photo_strip_config(settings.photo_strip_config_json if settings else "{}"),
         },
         "photos": [
             {
@@ -51,6 +58,14 @@ def event_out(event: Event, settings: GallerySettings | None, *, include_photos:
 def pin_hash(value: str) -> str:
     value = value.strip()
     return hashlib.sha256(value.encode("utf-8")).hexdigest() if value else ""
+
+
+def _photo_strip_config(raw: str | None) -> dict:
+    try:
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
 
 
 def public_id_from(payload: dict) -> str:
@@ -90,7 +105,7 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
     db.add(event)
     db.flush()
-    allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact"}
+    allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact", "card_maker_enabled", "card_template_name", "photo_strip_enabled", "photo_strip_config_json"}
     gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
     enabled = incoming_settings.get("enable_gallery", True)
     if not isinstance(enabled, bool):
@@ -102,6 +117,19 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
             if not isinstance(incoming_settings[key], bool):
                 raise HTTPException(422, f"Invalid gallery setting: {key}")
             gallery_settings[key] = incoming_settings[key]
+    if "card_maker_enabled" in incoming_settings and not isinstance(incoming_settings["card_maker_enabled"], bool):
+        raise HTTPException(422, "Invalid gallery setting: card_maker_enabled")
+    if "photo_strip_enabled" in incoming_settings and not isinstance(incoming_settings["photo_strip_enabled"], bool):
+        raise HTTPException(422, "Invalid gallery setting: photo_strip_enabled")
+    strip_config_json = incoming_settings.get("photo_strip_config_json", "{}")
+    if not isinstance(strip_config_json, str) or len(strip_config_json) > 250_000:
+        raise HTTPException(422, "Invalid Photo Strip configuration")
+    strip_config = _photo_strip_config(strip_config_json)
+    if not isinstance(strip_config.get("themes", []), list) or len(strip_config.get("themes", [])) > 20:
+        raise HTTPException(422, "Invalid Photo Strip theme list")
+    template_name = incoming_settings.get("card_template_name", "")
+    if not isinstance(template_name, str) or len(template_name) > 160:
+        raise HTTPException(422, "Invalid gallery setting: card_template_name")
     for key, limit in (
         ("credit_text", 220),
         ("report_contact", 220),
@@ -109,9 +137,113 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
         value = incoming_settings.get(key, "")
         if not isinstance(value, str) or len(value) > limit:
             raise HTTPException(422, f"Invalid gallery setting: {key}")
-    db.merge(GallerySettings(event_id=event.id, **gallery_settings))
+    current_settings = db.get(GallerySettings, event.id) or GallerySettings(event_id=event.id)
+    for key, value in gallery_settings.items():
+        setattr(current_settings, key, value)
+    current_settings.photo_strip_enabled = bool(incoming_settings.get("photo_strip_enabled", current_settings.photo_strip_enabled))
+    current_settings.photo_strip_config_json = strip_config_json
+    db.add(current_settings)
     db.commit()
     return {"event_id": event.id, "public_id": event.public_id}
+
+
+@router.post("/events/{public_id}/photo-strip-asset")
+async def sync_photo_strip_asset(public_id: str, theme_id: str = Form(...), photo_count: int = Form(...), template: UploadFile = File(...), db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if photo_count not in (2, 3, 4) or len(theme_id) > 64 or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in theme_id):
+        raise HTTPException(422, "Invalid Photo Strip layout key")
+    config = _photo_strip_config((db.get(GallerySettings, event.id) or GallerySettings(event_id=event.id)).photo_strip_config_json)
+    theme = next((item for item in config.get("themes", []) if isinstance(item, dict) and item.get("id") == theme_id), None)
+    layout = theme.get("layouts", {}).get(str(photo_count), {}) if theme else {}
+    slots = layout.get("slots") if isinstance(layout, dict) else None
+    if not isinstance(slots, list) or len(slots) != photo_count:
+        raise HTTPException(422, "Photo Strip layout does not match the configured slot count")
+    filename = (template.filename or "").replace("\\", "/").split("/")[-1][:160]
+    if not filename.lower().endswith(".png"):
+        raise HTTPException(415, "Photo Strip layout must be PNG")
+    content = await template.read(8 * 1024 * 1024 + 1)
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "Photo Strip layout exceeds 8 MB")
+    try:
+        with Image.open(BytesIO(content)) as image:
+            if image.format != "PNG" or min(image.size) < 300 or max(image.size) > 5000 or image.width >= image.height:
+                raise HTTPException(422, "Photo Strip template must be a portrait PNG between 300 and 5000 px")
+            image.load()
+            alpha = image.convert("RGBA").resize((100, 100)).getchannel("A")
+            for slot in slots:
+                x0, x1 = round((slot["x"] + slot["width"] * .35) * 100), round((slot["x"] + slot["width"] * .65) * 100)
+                y0, y1 = round((slot["y"] + slot["height"] * .35) * 100), round((slot["y"] + slot["height"] * .65) * 100)
+                sample = alpha.crop((x0, y0, x1, y1))
+                if not sample.width or not sample.height or sum(value < 40 for value in sample.getdata()) < sample.width * sample.height * .6:
+                    raise HTTPException(422, "Photo Strip PNG must contain transparent photo areas at configured slot positions")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, "Invalid Photo Strip PNG") from exc
+    row = db.query(PhotoStripAsset).filter_by(event_id=event.id, theme_id=theme_id, photo_count=photo_count).first()
+    if row is None:
+        row = PhotoStripAsset(event_id=event.id, theme_id=theme_id, photo_count=photo_count)
+    row.image_data = content
+    db.add(row)
+    db.commit()
+    return {"ok": True, "theme_id": theme_id, "photo_count": photo_count, "filename": filename}
+
+
+@router.delete("/events/{public_id}/photo-strip-asset")
+def delete_photo_strip_asset(public_id: str, theme_id: str, photo_count: int, db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if photo_count not in (2, 3, 4):
+        raise HTTPException(422, "Invalid Photo Strip layout")
+    row = db.query(PhotoStripAsset).filter_by(event_id=event.id, theme_id=theme_id, photo_count=photo_count).first()
+    if row:
+        db.delete(row)
+        db.commit()
+    return {"ok": True}
+
+
+@router.post("/events/{public_id}/card-template")
+async def sync_card_template(public_id: str, template: UploadFile = File(...), enabled: bool = Form(True), db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Event not found")
+    filename = (template.filename or "").replace("\\", "/").split("/")[-1][:160]
+    if not filename.lower().endswith(".png"):
+        raise HTTPException(415, "Card template must be PNG")
+    content = await template.read(8 * 1024 * 1024 + 1)
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "Card template exceeds 8 MB")
+    try:
+        with Image.open(BytesIO(content)) as image:
+            if image.format != "PNG":
+                raise HTTPException(415, "Card template must be PNG")
+            if min(image.size) < 300 or max(image.size) > 5000 or image.width >= image.height:
+                raise HTTPException(422, "Card template must be portrait, 300–5000 px, and taller than wide")
+            image.load()
+            rgba = image.convert("RGBA")
+            if min(rgba.getchannel("A").getextrema()) == 255:
+                raise HTTPException(422, "Card template must contain transparent photo areas")
+            alpha = rgba.resize((100, 100)).getchannel("A")
+            for cy in (.2425,.4325,.6225,.8125):
+                sample = alpha.crop((35, round((cy-.05)*100), 65, round((cy+.05)*100)))
+                if sum(value < 40 for value in sample.getdata()) < sample.width * sample.height * .6:
+                    raise HTTPException(422, "Template must leave four transparent photo slots in a vertical strip")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, "Invalid card template PNG") from exc
+    settings = db.get(GallerySettings, event.id) or GallerySettings(event_id=event.id)
+    settings.card_template_name = filename
+    settings.card_maker_enabled = enabled
+    db.add(settings)
+    template_row = db.get(CardTemplate, event.id) or CardTemplate(event_id=event.id)
+    template_row.image_data = content
+    db.add(template_row)
+    db.commit()
+    return {"ok": True, "filename": filename, "width": rgba.width, "height": rgba.height}
 
 
 @router.get("/events")

@@ -128,7 +128,7 @@ def diagnostics(db: Session = Depends(get_db)):
         "processing": db.query(Job).filter(Job.type == "PROCESS_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "upload": db.query(Job).filter(Job.type == "UPLOAD_VARIANT", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "publish": db.query(Job).filter(Job.type == "PUBLISH_PHOTO", Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
-        "cloud_sync": db.query(Job).filter(Job.type.in_(["SYNC_EVENT", "SYNC_PHOTO"]), Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
+        "cloud_sync": db.query(Job).filter(Job.type.in_(["SYNC_EVENT", "SYNC_PHOTO", "SYNC_CARD_TEMPLATE"]), Job.state.in_(["QUEUED", "RETRYING", "PROCESSING"])).count(),
         "failed": db.query(Job).filter(Job.state == "FAILED").count(),
         "uploads_ready": db.query(Upload).filter(Upload.state.in_(["QUEUED", "READY_TO_UPLOAD"])).count(),
     }

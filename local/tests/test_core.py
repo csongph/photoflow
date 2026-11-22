@@ -128,8 +128,10 @@ def test_admin_pin_session_is_signed(monkeypatch):
 def test_photobooth_uses_orientation_specific_frame(tmp_path: Path):
     cache = tmp_path / "CACHE"
     cache.mkdir()
-    landscape = Image.new("RGBA", (600, 300), (255, 0, 0, 128))
-    portrait = Image.new("RGBA", (300, 600), (0, 0, 255, 128))
+    landscape = Image.new("RGBA", (600, 300), (255, 0, 0, 255))
+    landscape.paste((0, 0, 0, 0), (100, 50, 500, 250))
+    portrait = Image.new("RGBA", (300, 600), (0, 0, 255, 255))
+    portrait.paste((0, 0, 0, 0), (50, 100, 250, 500))
     landscape.save(cache / "photobooth-frame-landscape.png")
     portrait.save(cache / "photobooth-frame-portrait.png")
     event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
@@ -137,20 +139,42 @@ def test_photobooth_uses_orientation_specific_frame(tmp_path: Path):
     wide = apply_photobooth_frame(Image.new("RGB", (800, 400), "white"), event)
     tall = apply_photobooth_frame(Image.new("RGB", (400, 800), "white"), event)
 
-    assert wide.getpixel((400, 200))[0] > wide.getpixel((400, 200))[2]
-    assert tall.getpixel((200, 400))[2] > tall.getpixel((200, 400))[0]
+    assert wide.getpixel((10, 10))[0] > wide.getpixel((10, 10))[2]
+    assert tall.getpixel((10, 10))[2] > tall.getpixel((10, 10))[0]
+    assert wide.getpixel((400, 200)) == (255, 255, 255)
+    assert tall.getpixel((200, 400)) == (255, 255, 255)
 
 
 def test_photobooth_frame_preserves_artwork_aspect_ratio(tmp_path: Path):
     cache = tmp_path / "CACHE"
     cache.mkdir()
     frame = Image.new("RGBA", (600, 300), (255, 0, 0, 255))
-    frame.putpixel((0, 0), (255, 0, 0, 0))
+    frame.paste((0, 0, 0, 0), (80, 40, 520, 260))
     frame.save(cache / "photobooth-frame-landscape.png")
     event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
 
     result = apply_photobooth_frame(Image.new("RGB", (600, 400), "white"), event)
 
-    assert result.size == (600, 400)
-    assert result.getpixel((0, 0)) == (255, 255, 255)
-    assert result.getpixel((100, 100))[0] > result.getpixel((100, 100))[1]
+    assert result.size == (600, 300)
+    assert result.getpixel((10, 10))[0] > result.getpixel((10, 10))[1]
+    assert result.getpixel((300, 150)) == (255, 255, 255)
+
+
+def test_photobooth_frame_fits_entire_photo_inside_opening(tmp_path: Path):
+    cache = tmp_path / "CACHE"
+    cache.mkdir()
+    frame = Image.new("RGBA", (300, 600), (255, 0, 0, 255))
+    frame.paste((0, 0, 0, 0), (50, 50, 250, 550))
+    frame.save(cache / "photobooth-frame-portrait.png")
+    event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
+    # A source with a different portrait ratio includes colored top and bottom
+    # markers; contain fitting must preserve both inside the frame opening.
+    source = Image.new("RGB", (400, 600), "white")
+    source.paste((0, 0, 255), (0, 0, 400, 60))
+    source.paste((0, 255, 0), (0, 540, 400, 600))
+
+    result = apply_photobooth_frame(source, event)
+
+    assert result.size == (300, 600)
+    assert result.getpixel((150, 165))[2] > result.getpixel((150, 165))[0]
+    assert result.getpixel((150, 430))[1] > result.getpixel((150, 430))[0]

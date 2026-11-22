@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import secrets
 import shutil
@@ -8,17 +9,17 @@ from datetime import datetime
 from pathlib import Path
 
 import qrcode
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, Response
-from PIL import Image
+from PIL import Image, ImageChops
 from io import BytesIO
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..frame_themes import THEMES, make_frame_png
 from ..models import Event, Job, Photo, Setting, Upload
+from ..processing.pipeline import _frame_aperture
 from ..schemas.local import EventCreate, EventOut
 from ..security import COOKIE_NAME, auth_enabled, valid_session
 from ..sync.cloud import CloudSyncError, delete_cloud_event, enabled as cloud_sync_enabled
@@ -31,6 +32,7 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 
 
 EVENT_DIRS = ["INCOMING", "ORIGINAL", "PROCESSING", "FINISHED", "THUMBNAILS", "PREVIEWS", "FAILED", "CACHE"]
+PHOTO_STRIP_COUNTS = (2, 3, 4)
 
 
 def gallery_url(db: Session, public_id: str) -> str:
@@ -73,6 +75,69 @@ def gallery_settings(event: Event) -> dict:
         return json.loads(event.gallery_json or "{}")
     except json.JSONDecodeError:
         return {}
+
+
+def default_photo_strip_slots(photo_count: int) -> list[dict[str, float]]:
+    if photo_count == 4:
+        return [{"x": .12, "y": round(.16 + index * .19, 4), "width": .76, "height": .165} for index in range(photo_count)]
+    heights = {2: .27, 3: .205, 4: .165}
+    gaps = {2: .07, 3: .05, 4: .025}
+    height, gap = heights[photo_count], gaps[photo_count]
+    total = photo_count * height + (photo_count - 1) * gap
+    top = (1 - total) / 2
+    return [{"x": .12, "y": round(top + index * (height + gap), 4), "width": .76, "height": height} for index in range(photo_count)]
+
+
+def normalize_photo_strip_theme(raw: object, existing: dict | None = None) -> dict:
+    if not isinstance(raw, dict):
+        raise HTTPException(422, "ธีม Photo Strip ต้องเป็นข้อมูล object")
+    theme_id = str(raw.get("id") or (existing or {}).get("id") or "").strip()
+    if not theme_id or len(theme_id) > 64 or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in theme_id):
+        raise HTTPException(422, "รหัสธีมไม่ถูกต้อง")
+    name = str(raw.get("name") or "").strip()
+    description = str(raw.get("description") or "").strip()
+    if not name or len(name) > 80 or len(description) > 300:
+        raise HTTPException(422, "กรุณาระบุชื่อธีม (ไม่เกิน 80 ตัวอักษร) และคำอธิบายไม่เกิน 300 ตัวอักษร")
+    colors = {}
+    for key, default in (("background_color", "#FFFFFF"), ("accent_color", "#E98672"), ("text_color", "#33283F")):
+        value = str(raw.get(key) or (existing or {}).get(key) or default).upper()
+        if len(value) != 7 or value[0] != "#" or any(ch not in "0123456789ABCDEF" for ch in value[1:]):
+            raise HTTPException(422, f"สี {key} ต้องอยู่ในรูปแบบ #RRGGBB")
+        colors[key] = value
+    caption = str(raw.get("caption") or (existing or {}).get("caption") or "").strip()
+    if len(caption) > 100:
+        raise HTTPException(422, "ข้อความบน Photo Strip ต้องไม่เกิน 100 ตัวอักษร")
+    incoming_layouts = raw.get("layouts") if isinstance(raw.get("layouts"), dict) else {}
+    old_layouts = (existing or {}).get("layouts", {})
+    layouts: dict[str, dict] = {}
+    for count in PHOTO_STRIP_COUNTS:
+        key = str(count)
+        incoming = incoming_layouts.get(key) if isinstance(incoming_layouts.get(key), dict) else {}
+        old = old_layouts.get(key) if isinstance(old_layouts, dict) and isinstance(old_layouts.get(key), dict) else {}
+        slots_raw = incoming.get("slots", old.get("slots", default_photo_strip_slots(count)))
+        if not isinstance(slots_raw, list) or len(slots_raw) != count:
+            raise HTTPException(422, f"Layout {count} ภาพต้องมีช่องภาพ {count} ช่อง")
+        slots = []
+        for slot in slots_raw:
+            if not isinstance(slot, dict):
+                raise HTTPException(422, "ตำแหน่งช่องภาพไม่ถูกต้อง")
+            normalized = {}
+            for key_name in ("x", "y", "width", "height"):
+                value = slot.get(key_name)
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(float(value)):
+                    raise HTTPException(422, "ค่าตำแหน่งช่องภาพต้องเป็นตัวเลข")
+                normalized[key_name] = float(value)
+            if normalized["x"] < 0 or normalized["y"] < 0 or normalized["width"] <= 0 or normalized["height"] <= 0 or normalized["x"] + normalized["width"] > 1 or normalized["y"] + normalized["height"] > 1:
+                raise HTTPException(422, "ช่องภาพต้องอยู่ภายในขอบเขตของ Photo Strip")
+            slots.append(normalized)
+        for index, first in enumerate(slots):
+            for second in slots[index + 1:]:
+                overlap_x = min(first["x"] + first["width"], second["x"] + second["width"]) - max(first["x"], second["x"])
+                overlap_y = min(first["y"] + first["height"], second["y"] + second["height"]) - max(first["y"], second["y"])
+                if overlap_x > .005 and overlap_y > .005:
+                    raise HTTPException(422, f"ช่องภาพใน Layout {count} ภาพห้ามซ้อนทับกัน")
+        layouts[key] = {"slots": slots, "template_name": str(incoming.get("template_name") or old.get("template_name") or "")[:160]}
+    return {"id": theme_id, "name": name, "description": description, **colors, "caption": caption, "layouts": layouts}
 
 
 def can_publish_from_disk(photo: Photo) -> bool:
@@ -402,6 +467,8 @@ async def upload_photobooth_frame(
                 raise HTTPException(422, "PNG ต้องมีส่วนโปร่งใสเพื่อให้เห็นภาพถ่ายด้านใน")
             if rgba.width < 300 or rgba.height < 300 or rgba.width > 8000 or rgba.height > 8000:
                 raise HTTPException(422, "ขนาดกรอบต้องอยู่ระหว่าง 300 ถึง 8000 พิกเซลต่อด้าน")
+            if _frame_aperture(rgba) is None:
+                raise HTTPException(422, "ตรวจไม่พบช่องโปร่งใสขนาดใหญ่ตรงกลางกรอบ กรุณาใช้ PNG ที่มีช่องภาพชัดเจน")
     except HTTPException:
         raise
     except Exception as exc:
@@ -422,17 +489,261 @@ async def upload_photobooth_frame(
     return {"ok": True, "orientation": orientation, "filename": frame_path.name, "width": rgba.width, "height": rgba.height}
 
 
-@router.get("/frame-themes/{theme_name}/{orientation}.png")
-def get_photobooth_frame_theme(theme_name: str, orientation: str):
-    if theme_name not in THEMES:
-        raise HTTPException(404, "ไม่พบธีมกรอบนี้")
-    if orientation not in {"portrait", "landscape"}:
-        raise HTTPException(422, "ทิศทางกรอบไม่ถูกต้อง")
-    return Response(
-        content=make_frame_png(theme_name, orientation),
-        media_type="image/png",
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
+@router.post("/{event_id}/card-template")
+async def upload_card_template(
+    event_id: str,
+    template: UploadFile = File(...),
+    enabled: bool = Form(True),
+    db: Session = Depends(get_db),
+):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if not (template.filename or "").lower().endswith(".png"):
+        raise HTTPException(415, "เทมเพลตการ์ดต้องเป็นไฟล์ PNG โปร่งใส")
+    content = await template.read(8 * 1024 * 1024 + 1)
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "ไฟล์เทมเพลตต้องมีขนาดไม่เกิน 8 MB")
+    try:
+        with Image.open(BytesIO(content)) as source:
+            if source.format != "PNG":
+                raise HTTPException(415, "รองรับเฉพาะเทมเพลต PNG")
+            if min(source.size) < 300 or max(source.size) > 5000 or source.width >= source.height:
+                raise HTTPException(422, "เทมเพลตต้องเป็นแนวตั้ง ขนาด 300–5000 พิกเซล และสูงกว่ากว้าง")
+            source.load()
+            rgba = source.convert("RGBA")
+            preview = rgba.resize((100, 100))
+            alpha = preview.getchannel("A")
+            preview_pixels = preview.load()
+            transparent_slots = []
+            white_slots = []
+            for cy in (.2425,.4325,.6225,.8125):
+                sample = alpha.crop((35, round((cy-.05)*100), 65, round((cy+.05)*100)))
+                transparent_slots.append(sum(value < 40 for value in sample.getdata()) >= sample.width * sample.height * .6)
+                x0, x1 = 35, 65
+                y0, y1 = round((cy-.05)*100), round((cy+.05)*100)
+                white_count = sum(
+                    preview_pixels[x, y][3] >= 240
+                    and min(preview_pixels[x, y][:3]) >= 248
+                    for y in range(y0, y1) for x in range(x0, x1)
+                )
+                white_slots.append(white_count >= (x1-x0)*(y1-y0)*.6)
+            if not all(transparent_slots) and not all(white_slots):
+                raise HTTPException(422, "เทมเพลตต้องมี 4 ช่องภาพโปร่งใสเรียงลงมาตรงกลาง หรือช่องสีขาวที่ระบบจะตัดให้อัตโนมัติ")
+            if all(white_slots):
+                # Canva exports from plans without transparent PNG export can use a white page.
+                # Remove the white page, then cut the four fixed photo apertures to alpha.
+                red, green, blue = rgba.convert("RGB").split()
+                white_mask = ImageChops.darker(ImageChops.darker(red, green), blue).point(lambda value: 255 if value >= 252 else 0)
+                rgba.putalpha(ImageChops.multiply(rgba.getchannel("A"), ImageChops.invert(white_mask)))
+                cutouts = rgba.getchannel("A")
+                for index in range(4):
+                    top = .16 + index * .19
+                    cutouts.paste(0, (round(.125*rgba.width), round((top+.005)*rgba.height), round(.875*rgba.width), round((top+.160)*rgba.height)))
+                rgba.putalpha(cutouts)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, "อ่านไฟล์ PNG ไม่ได้ กรุณาเลือกเทมเพลตที่ถูกต้อง") from exc
+
+    template_path = Path(event.root_path) / "CACHE" / "card-template.png"
+    template_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = template_path.with_suffix(".tmp.png")
+    rgba.save(temp_path, format="PNG", optimize=True)
+    temp_path.replace(template_path)
+    gallery = gallery_settings(event)
+    gallery["card_maker_enabled"] = enabled
+    gallery["card_template_name"] = Path((template.filename or "การ์ด.png").replace("\\", "/")).name[:160]
+    event.gallery_json = json.dumps(gallery, ensure_ascii=False)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+        enqueue_unique_job(db, event.id, "SYNC_CARD_TEMPLATE", priority=45)
+    db.commit()
+    return {"ok": True, "filename": gallery["card_template_name"], "width": rgba.width, "height": rgba.height}
+
+
+@router.get("/{event_id}/photo-strip")
+def get_photo_strip_settings(event_id: str, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    gallery = gallery_settings(event)
+    config = gallery.get("photo_strip") if isinstance(gallery.get("photo_strip"), dict) else {}
+    themes = config.get("themes") if isinstance(config.get("themes"), list) else []
+    result = []
+    for theme in themes:
+        if not isinstance(theme, dict):
+            continue
+        item = dict(theme)
+        layouts = item.get("layouts") if isinstance(item.get("layouts"), dict) else {}
+        for count in PHOTO_STRIP_COUNTS:
+            layout = layouts.get(str(count)) if isinstance(layouts.get(str(count)), dict) else {}
+            layout["asset_present"] = (Path(event.root_path) / "CACHE" / "photo-strip" / item["id"] / f"{count}.png").is_file()
+            layouts[str(count)] = layout
+        item["layouts"] = layouts
+        result.append(item)
+    return {"enabled": bool(config.get("enabled")), "active_theme_id": str(config.get("active_theme_id") or ""), "themes": result}
+
+
+@router.get("/{event_id}/photo-strip/themes/{theme_id}/layouts/{photo_count}.png")
+def preview_photo_strip_layout(event_id: str, theme_id: str, photo_count: int, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if photo_count not in PHOTO_STRIP_COUNTS:
+        raise HTTPException(404, "Photo Strip layout not found")
+    gallery = gallery_settings(event)
+    config = gallery.get("photo_strip") if isinstance(gallery.get("photo_strip"), dict) else {}
+    themes = config.get("themes") if isinstance(config.get("themes"), list) else []
+    theme = next((item for item in themes if isinstance(item, dict) and item.get("id") == theme_id), None)
+    if not theme or not theme.get("layouts", {}).get(str(photo_count), {}).get("template_name"):
+        raise HTTPException(404, "Photo Strip layout not found")
+    path = Path(event.root_path) / "CACHE" / "photo-strip" / theme_id / f"{photo_count}.png"
+    if not path.is_file():
+        raise HTTPException(404, "Photo Strip layout file not found")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=60"})
+
+
+@router.put("/{event_id}/photo-strip")
+def update_photo_strip_settings(event_id: str, payload: dict, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    incoming_themes = payload.get("themes")
+    if not isinstance(incoming_themes, list) or len(incoming_themes) > 20:
+        raise HTTPException(422, "ธีมต้องเป็นรายการไม่เกิน 20 ธีม")
+    gallery = gallery_settings(event)
+    prior = gallery.get("photo_strip") if isinstance(gallery.get("photo_strip"), dict) else {}
+    old_themes = {str(item.get("id")): item for item in prior.get("themes", []) if isinstance(item, dict) and item.get("id")}
+    themes = [normalize_photo_strip_theme(item, old_themes.get(str(item.get("id")))) for item in incoming_themes]
+    if len({item["id"] for item in themes}) != len(themes):
+        raise HTTPException(422, "รหัสธีมซ้ำกัน")
+    active_theme_id = str(payload.get("active_theme_id") or "")
+    enabled = payload.get("enabled", False)
+    if not isinstance(enabled, bool):
+        raise HTTPException(422, "สถานะ Photo Strip ต้องเป็น true หรือ false")
+    active_theme = next((item for item in themes if item["id"] == active_theme_id), None)
+    if active_theme_id and not active_theme:
+        raise HTTPException(422, "ไม่พบธีมที่เลือก")
+    if enabled:
+        if not active_theme:
+            raise HTTPException(422, "เลือกธีมก่อนเปิดใช้งาน Photo Strip")
+        for count in PHOTO_STRIP_COUNTS:
+            asset = Path(event.root_path) / "CACHE" / "photo-strip" / active_theme_id / f"{count}.png"
+            if not asset.is_file():
+                raise HTTPException(422, f"อัปโหลดไฟล์ Layout {count} ภาพให้ครบก่อนเปิดใช้งาน")
+    gallery["photo_strip"] = {"enabled": enabled, "active_theme_id": active_theme_id, "themes": themes}
+    event.gallery_json = json.dumps(gallery, ensure_ascii=False)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+    db.commit()
+    return {"ok": True, **gallery["photo_strip"]}
+
+
+@router.delete("/{event_id}/photo-strip/themes/{theme_id}")
+def delete_photo_strip_theme(event_id: str, theme_id: str, db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    gallery = gallery_settings(event)
+    config = gallery.get("photo_strip") if isinstance(gallery.get("photo_strip"), dict) else {}
+    themes = config.get("themes") if isinstance(config.get("themes"), list) else []
+    if not any(isinstance(theme, dict) and theme.get("id") == theme_id for theme in themes):
+        raise HTTPException(404, "ไม่พบธีม Photo Strip")
+    config["themes"] = [theme for theme in themes if not isinstance(theme, dict) or theme.get("id") != theme_id]
+    if config.get("active_theme_id") == theme_id:
+        config["active_theme_id"] = config["themes"][0]["id"] if config["themes"] else ""
+        config["enabled"] = False
+    gallery["photo_strip"] = config
+    event.gallery_json = json.dumps(gallery, ensure_ascii=False)
+    theme_dir = Path(event.root_path) / "CACHE" / "photo-strip" / theme_id
+    if theme_dir.is_dir():
+        shutil.rmtree(theme_dir)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+        for photo_count in PHOTO_STRIP_COUNTS:
+            db.add(Job(event_id=event.id, type="DELETE_PHOTO_STRIP_ASSET", priority=45, payload_json=json.dumps({"theme_id": theme_id, "photo_count": photo_count})))
+    db.commit()
+    return {"ok": True, "theme_id": theme_id}
+
+
+@router.post("/{event_id}/photo-strip/themes/{theme_id}/layouts/{photo_count}")
+async def upload_photo_strip_layout(event_id: str, theme_id: str, photo_count: int, template: UploadFile = File(...), db: Session = Depends(get_db)):
+    event = db.get(Event, event_id)
+    if not event:
+        raise HTTPException(404, "Event not found")
+    if photo_count not in PHOTO_STRIP_COUNTS:
+        raise HTTPException(422, "Photo Strip Layout รองรับ 2, 3 หรือ 4 ภาพ")
+    if not (template.filename or "").lower().endswith(".png"):
+        raise HTTPException(415, "เทมเพลต Layout ต้องเป็น PNG")
+    content = await template.read(8 * 1024 * 1024 + 1)
+    if len(content) > 8 * 1024 * 1024:
+        raise HTTPException(413, "ไฟล์เทมเพลตต้องไม่เกิน 8 MB")
+    gallery = gallery_settings(event)
+    config = gallery.get("photo_strip") if isinstance(gallery.get("photo_strip"), dict) else {}
+    themes = config.get("themes") if isinstance(config.get("themes"), list) else []
+    theme = next((item for item in themes if isinstance(item, dict) and item.get("id") == theme_id), None)
+    if not theme:
+        raise HTTPException(404, "ไม่พบธีม Photo Strip")
+    layout = theme.get("layouts", {}).get(str(photo_count), {})
+    slots = layout.get("slots") if isinstance(layout, dict) else None
+    if not isinstance(slots, list) or len(slots) != photo_count:
+        raise HTTPException(422, "กำหนดช่องภาพของ Layout ให้ครบก่อนอัปโหลด")
+    try:
+        with Image.open(BytesIO(content)) as source:
+            if source.format != "PNG" or min(source.size) < 300 or max(source.size) > 5000 or source.width >= source.height:
+                raise HTTPException(422, "เทมเพลตต้องเป็น PNG แนวตั้ง ขนาด 300–5000 พิกเซล")
+            source.load()
+            rgba = source.convert("RGBA")
+            small = rgba.resize((100, 100))
+            pixels = small.load()
+            alpha = small.getchannel("A")
+            transparent_ok, white_ok = [], []
+            for slot in slots:
+                x, y, width, height = (slot[key] for key in ("x", "y", "width", "height"))
+                x0, x1 = max(0, round((x + width*.35)*100)), min(100, round((x + width*.65)*100))
+                y0, y1 = max(0, round((y + height*.35)*100)), min(100, round((y + height*.65)*100))
+                if x1 <= x0 or y1 <= y0:
+                    raise HTTPException(422, "พื้นที่ช่องภาพเล็กเกินไป")
+                sample = alpha.crop((x0, y0, x1, y1))
+                area = (x1-x0)*(y1-y0)
+                transparent_ok.append(sum(value < 40 for value in sample.getdata()) >= area*.6)
+                white_count = sum(pixels[px, py][3] >= 240 and min(pixels[px, py][:3]) >= 248 for py in range(y0, y1) for px in range(x0, x1))
+                white_ok.append(white_count >= area*.6)
+            if not all(transparent_ok) and not all(white_ok):
+                raise HTTPException(422, f"Layout {photo_count} ต้องมีช่องภาพโปร่งใสหรือช่องสีขาวครบ {photo_count} ช่องตามตำแหน่งที่กำหนด")
+            if all(white_ok):
+                red, green, blue = rgba.convert("RGB").split()
+                white_mask = ImageChops.darker(ImageChops.darker(red, green), blue).point(lambda value: 255 if value >= 252 else 0)
+                rgba.putalpha(ImageChops.multiply(rgba.getchannel("A"), ImageChops.invert(white_mask)))
+                cutouts = rgba.getchannel("A")
+                for slot in slots:
+                    x0 = round((slot["x"] + slot["width"]*.02)*rgba.width)
+                    y0 = round((slot["y"] + slot["height"]*.02)*rgba.height)
+                    x1 = round((slot["x"] + slot["width"]*.98)*rgba.width)
+                    y1 = round((slot["y"] + slot["height"]*.98)*rgba.height)
+                    cutouts.paste(0, (x0, y0, x1, y1))
+                rgba.putalpha(cutouts)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(422, "อ่านไฟล์เทมเพลต PNG ไม่ได้") from exc
+
+    destination = Path(event.root_path) / "CACHE" / "photo-strip" / theme_id
+    destination.mkdir(parents=True, exist_ok=True)
+    file_path = destination / f"{photo_count}.png"
+    temp_path = file_path.with_suffix(".tmp.png")
+    rgba.save(temp_path, format="PNG", optimize=True)
+    temp_path.replace(file_path)
+    layout["template_name"] = Path((template.filename or "template.png").replace("\\", "/")).name[:160]
+    theme["layouts"][str(photo_count)] = layout
+    gallery["photo_strip"] = config
+    event.gallery_json = json.dumps(gallery, ensure_ascii=False)
+    if cloud_sync_enabled():
+        enqueue_unique_job(db, event.id, "SYNC_EVENT", priority=40)
+        db.add(Job(event_id=event.id, type="SYNC_PHOTO_STRIP_ASSET", priority=45, payload_json=json.dumps({"theme_id": theme_id, "photo_count": photo_count})))
+    db.commit()
+    return {"ok": True, "theme_id": theme_id, "photo_count": photo_count, "filename": layout["template_name"], "width": rgba.width, "height": rgba.height}
 
 
 @router.post("/{event_id}/start")
@@ -495,17 +806,26 @@ def get_gallery_settings(event_id: str, db: Session = Depends(get_db)):
     return {
         "credit_text": settings.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO",
         "report_contact": settings.get("report_contact") or "",
+        "card_maker_enabled": bool(settings.get("card_maker_enabled")),
+        "card_template_present": (Path(event.root_path) / "CACHE" / "card-template.png").is_file(),
+        "card_template_name": settings.get("card_template_name") or "",
     }
 
 
 @router.post("/{event_id}/gallery-settings")
-def update_gallery_settings(event_id: str, payload: dict[str, str], db: Session = Depends(get_db)):
+def update_gallery_settings(event_id: str, payload: dict, db: Session = Depends(get_db)):
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
     settings = gallery_settings(event)
     settings["credit_text"] = str(payload.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO").strip()
     settings["report_contact"] = str(payload.get("report_contact") or "").strip()
+    if "card_maker_enabled" in payload:
+        if not isinstance(payload["card_maker_enabled"], bool):
+            raise HTTPException(422, "card_maker_enabled must be a boolean")
+        if payload["card_maker_enabled"] and not (Path(event.root_path) / "CACHE" / "card-template.png").is_file():
+            raise HTTPException(422, "อัปโหลดเทมเพลตการ์ดก่อนเปิดฟีเจอร์ให้ลูกค้า")
+        settings["card_maker_enabled"] = payload["card_maker_enabled"]
     for key in ("sponsor_name", "sponsor_logo", "sponsor_hashtag", "sponsor_promo", "sponsor_promo_link"):
         settings.pop(key, None)
     event.gallery_json = json.dumps(settings)

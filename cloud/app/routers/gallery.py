@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import os
 import time
 from datetime import timezone
@@ -18,7 +19,7 @@ from sqlalchemy.orm import Session
 import qrcode
 
 from ..database import get_db
-from ..models import Event, GallerySettings, Photo, PhotoVariant
+from ..models import CardTemplate, Event, GallerySettings, Photo, PhotoStripAsset, PhotoVariant
 
 router = APIRouter(prefix="/api/gallery", tags=["gallery"])
 PIN_COOKIE = "momentlink_gallery_access"
@@ -139,6 +140,14 @@ def public_gallery_url(public_id: str, request: Request | None = None) -> str:
     return f"{base}/{public_id}"
 
 
+def photo_strip_config(raw: str | None) -> dict:
+    try:
+        value = json.loads(raw or "{}")
+        return value if isinstance(value, dict) else {}
+    except (TypeError, ValueError):
+        return {}
+
+
 def drive_download_url(file_id: str) -> str:
     return f"https://drive.google.com/uc?export=download&id={file_id}"
 
@@ -200,6 +209,18 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
         raise HTTPException(404, "Gallery is closed")
     locked = not has_gallery_access(event, request)
     count = 0 if locked else db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).count()
+    has_card_template = bool(settings and settings.card_template_name and db.query(CardTemplate.event_id).filter(CardTemplate.event_id == event.id).first())
+    strip_config = photo_strip_config(settings.photo_strip_config_json if settings else "{}")
+    themes = strip_config.get("themes") if isinstance(strip_config.get("themes"), list) else []
+    active_theme = next((theme for theme in themes if isinstance(theme, dict) and theme.get("id") == strip_config.get("active_theme_id")), None)
+    if active_theme:
+        layouts = active_theme.get("layouts") if isinstance(active_theme.get("layouts"), dict) else {}
+        for photo_count in (2, 3, 4):
+            layout = layouts.get(str(photo_count)) if isinstance(layouts.get(str(photo_count)), dict) else {}
+            layout["asset_present"] = bool(db.query(PhotoStripAsset.id).filter_by(event_id=event.id, theme_id=active_theme["id"], photo_count=photo_count).first())
+            layouts[str(photo_count)] = layout
+        active_theme["layouts"] = layouts
+    strip_available = bool(active_theme and all(active_theme.get("layouts", {}).get(str(photo_count), {}).get("asset_present") for photo_count in (2, 3, 4)))
     return {
         "event": {"name": event.name, "event_date": event.event_date, "photo_count": count, "gallery_url": public_gallery_url(event.public_id, request)},
         "settings": {
@@ -207,10 +228,51 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
             "find_my_photos": False,
             "credit_text": settings.credit_text if settings and settings.credit_text else "Photo Booth Experience by CS.BXXM STUDIO",
             "report_contact": settings.report_contact if settings else "",
+            "card_maker_enabled": bool(not locked and settings and settings.allow_download and settings.card_maker_enabled and has_card_template),
+            "card_template_name": settings.card_template_name if settings else "",
+            "photo_strip_enabled": bool(not locked and settings and settings.enabled and settings.allow_download and settings.photo_strip_enabled and strip_config.get("enabled") and strip_available),
+            "photo_strip_theme": active_theme,
             "locked": locked,
             "requires_pin": bool(event.pin_hash),
         },
     }
+
+
+@router.get("/{public_id}/card-template.png")
+def card_template(public_id: str, request: Request, db: Session = Depends(get_db)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Gallery not found")
+    settings = db.get(GallerySettings, event.id)
+    if settings and not settings.enabled:
+        raise HTTPException(404, "Gallery is closed")
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
+    template = db.get(CardTemplate, event.id)
+    if not settings or not settings.allow_download or not settings.card_maker_enabled or not settings.card_template_name or not template:
+        raise HTTPException(404, "Card maker is disabled")
+    return Response(content=template.image_data, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@router.get("/{public_id}/photo-strip/{theme_id}/{photo_count}.png")
+def photo_strip_template(public_id: str, theme_id: str, photo_count: int, request: Request, db: Session = Depends(get_db)):
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if not event:
+        raise HTTPException(404, "Gallery not found")
+    settings = db.get(GallerySettings, event.id)
+    if settings and not settings.enabled:
+        raise HTTPException(404, "Gallery is closed")
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
+    config = photo_strip_config(settings.photo_strip_config_json if settings else "{}")
+    if not settings or not settings.allow_download or not settings.photo_strip_enabled or not config.get("enabled"):
+        raise HTTPException(404, "Photo Strip is disabled")
+    if photo_count not in (2, 3, 4) or theme_id != config.get("active_theme_id"):
+        raise HTTPException(404, "Photo Strip layout not found")
+    row = db.query(PhotoStripAsset).filter_by(event_id=event.id, theme_id=theme_id, photo_count=photo_count).first()
+    if not row:
+        raise HTTPException(404, "Photo Strip layout asset not found")
+    return Response(content=row.image_data, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})
 
 
 @router.get("/{public_id}/qr.png")

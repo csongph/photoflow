@@ -22,7 +22,11 @@ let galleryMeta = {
   eventName: "CS.BXXM Gallery",
   creditText: "Photo Booth Experience by CS.BXXM STUDIO",
   reportContact: "",
-  allowDownload: true
+  allowDownload: true,
+  cardMakerEnabled: false,
+  cardTemplateName: "",
+  photoStripEnabled: false,
+  photoStripTheme: null
 };
 
 let galleryPhotos = [];
@@ -33,6 +37,11 @@ let currentPhotoIndex = -1;
 let touchStartX = 0;
 let touchStartY = 0;
 let selectionMode = false;
+let cardMakerSelection = false;
+let photoStripSelection = false;
+let photoStripCount = 0;
+let photoStripEditor = null;
+let preparedPhotoStripFile = null;
 const selectedPhotoIds = new Set();
 const preparedFiles = new Map();
 const preparingPhotoIds = new Set();
@@ -43,6 +52,7 @@ let androidDownloadQueue = null;
 const MAX_SHARE_SELECTION = 10;
 let publicSlideshowState = null;
 let sessionStartTime = Date.now();
+let preparedCardFile = null;
 
 // Utility Toast
 function showToast(message, type = "info") {
@@ -137,7 +147,11 @@ async function initGallery() {
       eventName,
       creditText: s.credit_text || "Photo Booth Experience by CS.BXXM STUDIO",
       reportContact: s.report_contact || "",
-      allowDownload: Boolean(s.allow_download)
+      allowDownload: Boolean(s.allow_download),
+      cardMakerEnabled: Boolean(s.card_maker_enabled && s.allow_download && !s.locked),
+      cardTemplateName: s.card_template_name || "",
+      photoStripEnabled: Boolean(s.photo_strip_enabled && s.allow_download && !s.locked),
+      photoStripTheme: s.photo_strip_theme || null
     };
 
     renderGalleryInfo();
@@ -153,6 +167,10 @@ async function initGallery() {
     if (dlBtn) dlBtn.style.display = allowDl ? "inline-flex" : "none";
     const selectModeBtn = document.querySelector("#selectModeBtn");
     if (selectModeBtn) selectModeBtn.style.display = allowDl ? "inline-flex" : "none";
+    const cardMakerStartBtn = document.querySelector("#cardMakerStartBtn");
+    if (cardMakerStartBtn) cardMakerStartBtn.hidden = !allowDl || !galleryMeta.cardMakerEnabled;
+    const photoStripStartBtn = document.querySelector("#photoStripStartBtn");
+    if (photoStripStartBtn) photoStripStartBtn.hidden = !allowDl || !galleryMeta.photoStripEnabled;
 
     const pinPanel = document.querySelector("#pinPanel");
     if (pinPanel) pinPanel.style.display = s.locked ? "flex" : "none";
@@ -679,6 +697,9 @@ function updateRecentCount() {
 function toggleSelectionMode() {
   selectionMode = !selectionMode;
   if (!selectionMode) {
+    cardMakerSelection = false;
+    photoStripSelection = false;
+    photoStripCount = 0;
     preparationControllers.forEach(controller => controller.abort());
     preparationControllers.clear();
     preparingPhotoIds.clear();
@@ -700,12 +721,29 @@ function toggleSelectionMode() {
       ? `<span class="btn-icon">✕</span> ยกเลิกการเลือก` 
       : `<span class="btn-icon">✓</span> เลือกเพื่อบันทึก`;
   }
+  const selectAll = document.querySelector("#selectAllBtn");
+  if (selectAll) selectAll.textContent = "เลือกทั้งหมด";
 
   document.querySelectorAll(".photo-card").forEach(card => {
     const isSelected = selectedPhotoIds.has(card.dataset.id);
     card.classList.toggle("selected", isSelected);
   });
 
+  updateSelectionControls();
+}
+
+function startCardMakerSelection() {
+  if (!galleryMeta.cardMakerEnabled) return;
+  if (!selectionMode) toggleSelectionMode();
+  cardMakerSelection = true;
+  photoStripSelection = false;
+  const selectAll = document.querySelector("#selectAllBtn");
+  if (selectAll) selectAll.textContent = "เลือกล่าสุด 4 รูป";
+  selectedPhotoIds.clear();
+  preparedFiles.clear();
+  failedPreparationIds.clear();
+  document.querySelectorAll(".photo-card.selected").forEach(card => card.classList.remove("selected"));
+  showToast("เลือกรูปให้ครบ 4 รูปเพื่อจัดเป็นการ์ด", "info");
   updateSelectionControls();
 }
 
@@ -717,8 +755,9 @@ function togglePhotoSelection(photoId, card) {
     preparationControllers.get(photoId)?.abort();
     card.classList.remove("selected");
   } else {
-    if (selectedPhotoIds.size >= MAX_SHARE_SELECTION) {
-      showToast(`เลือกได้สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง เพื่อบันทึกได้เสถียร`, "info");
+    const maxSelection = cardMakerSelection ? 4 : photoStripSelection ? photoStripCount : MAX_SHARE_SELECTION;
+    if (selectedPhotoIds.size >= maxSelection) {
+      showToast(cardMakerSelection ? "การ์ดหนึ่งใบเลือกได้สูงสุด 4 รูป" : photoStripSelection ? `Photo Strip นี้เลือกได้ ${photoStripCount} รูป` : `เลือกได้สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง เพื่อบันทึกได้เสถียร`, "info");
       return;
     }
     selectedPhotoIds.add(photoId);
@@ -759,13 +798,14 @@ function selectAllPhotos() {
   const cards = [...document.querySelectorAll(".photo-card")];
   const visibleCards = cards.filter(card => card.offsetParent !== null);
   const available = visibleCards.filter(card => !selectedPhotoIds.has(card.dataset.id));
-  const room = MAX_SHARE_SELECTION - selectedPhotoIds.size;
+  const maxSelection = cardMakerSelection ? 4 : photoStripSelection ? photoStripCount : MAX_SHARE_SELECTION;
+  const room = maxSelection - selectedPhotoIds.size;
   for (const card of available.slice(0, room)) {
     selectedPhotoIds.add(card.dataset.id);
     card.classList.add("selected");
     if (isAppleMobileDevice()) prepareSelectedPhoto(card.dataset.id);
   }
-  if (available.length > room) showToast(`เลือกเพิ่มได้ ${room} รูป · สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง`, "info");
+  if (available.length > room) showToast(cardMakerSelection ? `เลือกได้สูงสุด ${maxSelection} รูปสำหรับการ์ด` : photoStripSelection ? `เลือกได้สูงสุด ${maxSelection} รูปสำหรับ Photo Strip` : `เลือกเพิ่มได้ ${room} รูป · สูงสุด ${MAX_SHARE_SELECTION} รูปต่อครั้ง`, "info");
   updateSelectionControls();
 }
 
@@ -788,13 +828,338 @@ function updateSelectionControls() {
   const needsPreparedFiles = isAppleMobileDevice();
   const countLabel = document.querySelector("#selectedCount");
   const downloadButton = document.querySelector("#downloadSelectedBtn");
+  const cardButton = document.querySelector("#makeCardBtn");
+  const stripButton = document.querySelector("#makePhotoStripBtn");
+  const selectAll = document.querySelector("#selectAllBtn");
 
   if (countLabel) countLabel.textContent = preparing ? `เตรียมรูป ${ready}/${count}` : `เลือก ${count} รูป`;
   if (downloadButton) {
+    downloadButton.hidden = cardMakerSelection || photoStripSelection;
     downloadButton.disabled = count === 0 || (needsPreparedFiles && (preparing > 0 || (ready !== count && failed === 0)));
     const readyLabel = needsPreparedFiles ? `บันทึกลง Photos ${count} รูป` : `ดาวน์โหลด ${count} รูป`;
     downloadButton.innerHTML = `<span class="btn-icon">${preparing ? "…" : "↓"}</span> ${preparing ? `เตรียมรูป ${ready}/${count}` : failed ? `ดาวน์โหลดแยก ${count} รูป` : readyLabel}`;
   }
+  if (cardButton) {
+    cardButton.hidden = !cardMakerSelection;
+    cardButton.disabled = count !== 4;
+    cardButton.textContent = count === 4 ? "▤ สร้างการ์ด 4 รูป" : `▤ เลือกอีก ${Math.max(0, 4-count)} รูป`;
+  }
+  if (stripButton) {
+    stripButton.hidden = !photoStripSelection;
+    stripButton.disabled = count !== photoStripCount;
+    stripButton.textContent = count === photoStripCount ? `▤ สร้าง Photo Strip ${count} ภาพ` : `▤ เลือกอีก ${Math.max(0, photoStripCount-count)} รูป`;
+  }
+  if (selectAll) selectAll.hidden = (cardMakerSelection && count >= 4) || (photoStripSelection && count >= photoStripCount);
+}
+
+async function createCardFromSelection() {
+  const selected = [...selectedPhotoIds];
+  if (!galleryMeta.cardMakerEnabled || selected.length !== 4) {
+    showToast("เลือกภาพให้ครบ 4 รูปก่อนสร้างการ์ด", "info");
+    return;
+  }
+  const dialog = document.querySelector("#cardMakerDialog");
+  const canvas = document.querySelector("#cardMakerCanvas");
+  const status = document.querySelector("#cardMakerStatus");
+  const saveButton = document.querySelector("#saveCardButton");
+  const shareButton = document.querySelector("#shareCardButton");
+  preparedCardFile = null;
+  saveButton.disabled = true;
+  shareButton.disabled = true;
+  status.textContent = "กำลังจัดวางรูปภาพลงเทมเพลต…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    const templateUrl = `${API}/api/gallery/${encodeURIComponent(publicId)}/card-template.png?v=${Date.now()}`;
+    const templateResponse = await fetch(templateUrl, { credentials: "include", cache: "no-store" });
+    if (!templateResponse.ok) throw new Error("โหลดเทมเพลตการ์ดไม่สำเร็จ ลองรีเฟรชแกลเลอรีแล้วทำใหม่");
+    const templateBlob = await templateResponse.blob();
+    const template = await createImageBitmap(templateBlob);
+    const outputScale = Math.min(1, 1800 / template.width, 3000 / template.height);
+    canvas.width = Math.max(1, Math.round(template.width * outputScale));
+    canvas.height = Math.max(1, Math.round(template.height * outputScale));
+    const ctx = canvas.getContext("2d", { alpha: true, colorSpace: "srgb" });
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const x0 = canvas.width * .12;
+    const y0 = canvas.height * .16;
+    const slotWidth = canvas.width * .76;
+    const slotHeight = canvas.height * .165;
+    const gapY = canvas.height * .025;
+    for (let index = 0; index < selected.length; index++) {
+      const photo = galleryPhotos.find(item => item.id === selected[index]);
+      if (!photo) throw new Error("หารูปที่เลือกไม่พบในแกลเลอรี");
+      let blob = preparedFiles.get(photo.id);
+      if (!blob) {
+        const response = await fetch(freshDownloadUrl(photo.download), { credentials: "include", cache: "no-store" });
+        if (!response.ok) throw new Error(`ดาวน์โหลด ${photo.filename} มาใส่การ์ดไม่สำเร็จ`);
+        blob = await response.blob();
+      }
+      if (!blob.type.startsWith("image/") || blob.size > 40 * 1024 * 1024) throw new Error("รูปภาพใหญ่เกินไปหรือไฟล์ไม่ถูกต้อง");
+      const bitmap = await createImageBitmap(blob);
+      const x = x0;
+      const y = y0 + index * (slotHeight + gapY);
+      ctx.save();
+      ctx.shadowColor = "rgba(0,0,0,.34)";
+      ctx.shadowBlur = Math.max(3, canvas.width * .008);
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(x-2, y-2, slotWidth+4, slotHeight+4);
+      ctx.shadowColor = "transparent";
+      const scale = Math.max(slotWidth / bitmap.width, slotHeight / bitmap.height);
+      const sw = slotWidth / scale;
+      const sh = slotHeight / scale;
+      const sx = (bitmap.width - sw) / 2;
+      const sy = (bitmap.height - sh) / 2;
+      ctx.drawImage(bitmap, sx, sy, sw, sh, x, y, slotWidth, slotHeight);
+      ctx.restore();
+      bitmap.close();
+    }
+    ctx.drawImage(template, 0, 0, canvas.width, canvas.height);
+    template.close();
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("สร้างไฟล์การ์ดไม่สำเร็จ กรุณาลองอีกครั้ง");
+    const safeName = galleryMeta.eventName.replace(/[\\/:*?"<>|]/g, "-").slice(0, 60) || "photoflow";
+    preparedCardFile = new File([blob], `${safeName}-photo-card.png`, { type: "image/png" });
+    status.textContent = "การ์ดพร้อมแล้ว บันทึกลงเครื่องหรือแชร์ต่อได้เลย";
+    saveButton.disabled = false;
+    shareButton.disabled = false;
+  } catch (error) {
+    console.error("Could not create photo card", error);
+    status.textContent = error.message || "สร้างการ์ดไม่สำเร็จ กรุณาลองใหม่";
+  }
+}
+
+function closeCardMaker() {
+  const dialog = document.querySelector("#cardMakerDialog");
+  if (dialog?.open) dialog.close();
+  preparedCardFile = null;
+}
+
+function savePhotoCard() {
+  if (!preparedCardFile) return;
+  const url = URL.createObjectURL(preparedCardFile);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = preparedCardFile.name;
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 30000);
+  showToast("บันทึกการ์ดภาพแล้ว", "success");
+}
+
+async function sharePhotoCard() {
+  if (!preparedCardFile) return;
+  if (navigator.share && navigator.canShare?.({ files: [preparedCardFile] })) {
+    try { await navigator.share({ files: [preparedCardFile], title: galleryMeta.eventName, text: "การ์ดภาพจากงาน " + galleryMeta.eventName }); }
+    catch (error) { if (error.name !== "AbortError") savePhotoCard(); }
+  } else savePhotoCard();
+}
+
+function openPhotoStripSetup() {
+  const theme = galleryMeta.photoStripTheme;
+  if (!galleryMeta.photoStripEnabled || !theme) return showToast("Photo Strip ยังไม่พร้อมใช้งาน", "info");
+  document.querySelector("#photoStripThemeTitle").textContent = theme.name || "Photo Strip";
+  document.querySelector("#photoStripThemeDescription").textContent = theme.description || "เลือกจำนวนภาพ แล้วเลือกภาพจากแกลเลอรี";
+  document.querySelectorAll("[data-strip-count]").forEach(button => {
+    const count = Number(button.dataset.stripCount);
+    const ready = Boolean(theme.layouts?.[String(count)]?.asset_present);
+    button.disabled = !ready;
+    button.classList.toggle("active", count === photoStripCount);
+  });
+  const dialog = document.querySelector("#photoStripCountDialog");
+  if (dialog && !dialog.open) dialog.showModal();
+}
+
+function choosePhotoStripCount(count) {
+  if (![2, 3, 4].includes(count) || !galleryMeta.photoStripTheme?.layouts?.[String(count)]?.asset_present) return;
+  photoStripCount = count;
+  document.querySelectorAll("[data-strip-count]").forEach(button => button.classList.toggle("active", Number(button.dataset.stripCount) === count));
+}
+
+function closePhotoStripSetup() {
+  const dialog = document.querySelector("#photoStripCountDialog");
+  if (dialog?.open) dialog.close();
+}
+
+function beginPhotoStripSelection() {
+  if (!photoStripCount) return showToast("เลือกจำนวนภาพก่อน", "info");
+  closePhotoStripSetup();
+  if (!selectionMode) toggleSelectionMode();
+  cardMakerSelection = false;
+  photoStripSelection = true;
+  selectedPhotoIds.clear();
+  preparedFiles.clear();
+  failedPreparationIds.clear();
+  document.querySelectorAll(".photo-card.selected").forEach(card => card.classList.remove("selected"));
+  const selectAll = document.querySelector("#selectAllBtn");
+  if (selectAll) selectAll.textContent = `เลือกล่าสุด ${photoStripCount} รูป`;
+  showToast(`เลือกรูปให้ครบ ${photoStripCount} รูปสำหรับ Photo Strip`, "info");
+  updateSelectionControls();
+}
+
+async function createPhotoStripFromSelection() {
+  const ids = [...selectedPhotoIds];
+  const theme = galleryMeta.photoStripTheme;
+  const layout = theme?.layouts?.[String(photoStripCount)];
+  if (!galleryMeta.photoStripEnabled || !theme || ids.length !== photoStripCount || !layout?.asset_present) {
+    showToast("กรุณาเลือกรูปให้ครบและตรวจสอบ Layout ของธีม", "info");
+    return;
+  }
+  const status = document.querySelector("#photoStripEditorStatus");
+  const canvas = document.querySelector("#photoStripCanvas");
+  const exportButton = document.querySelector("#exportPhotoStripButton");
+  const downloadButton = document.querySelector("#downloadPhotoStripButton");
+  const shareButton = document.querySelector("#sharePhotoStripButton");
+  const dialog = document.querySelector("#photoStripEditorDialog");
+  preparedPhotoStripFile = null;
+  downloadButton.disabled = shareButton.disabled = true;
+  exportButton.disabled = true;
+  status.textContent = "กำลังโหลดภาพและ Layout…";
+  if (!dialog.open) dialog.showModal();
+  try {
+    const templateUrl = `${API}/api/gallery/${encodeURIComponent(publicId)}/photo-strip/${encodeURIComponent(theme.id)}/${photoStripCount}.png`;
+    const templateResponse = await fetch(freshDownloadUrl(templateUrl), { credentials: "include", cache: "no-store" });
+    if (!templateResponse.ok) throw new Error("โหลด Layout ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง");
+    const template = await createImageBitmap(await templateResponse.blob());
+    const photos = [];
+    for (const id of ids) {
+      const photo = galleryPhotos.find(item => item.id === id);
+      if (!photo) throw new Error("ไม่พบรูปที่เลือกในแกลเลอรี");
+      const response = await fetch(freshDownloadUrl(photo.download), { credentials: "include", cache: "no-store" });
+      if (!response.ok) throw new Error(`โหลด ${photo.filename} ไม่สำเร็จ`);
+      const blob = await response.blob();
+      if (!blob.type.startsWith("image/") || blob.size > 40 * 1024 * 1024) throw new Error("รูปภาพไม่ถูกต้องหรือมีขนาดใหญ่เกินไป");
+      photos.push({ id, photo, bitmap: await createImageBitmap(blob, { imageOrientation: "from-image" }), zoom: 1, panX: 0, panY: 0, rotation: 0 });
+    }
+    photoStripEditor = { theme, layout, count: photoStripCount, template, photos, active: 0, canvasScale: Math.min(1, 1800 / template.width, 3200 / template.height), drag: null, pointers: new Map(), pinch: null, undo: [] };
+    const selected = document.querySelector("#photoStripSelectedPhotos");
+    selected.innerHTML = photos.map((entry, index) => `<button type="button" class="photo-strip-photo-chip ${index===0?"active":""}" data-strip-slot="${index}"><img src="${freshDownloadUrl(entry.photo.preview)}" alt=""><span>${index+1}. ${escapeHtml(entry.photo.filename)}</span></button>`).join("");
+    selected.querySelectorAll("[data-strip-slot]").forEach(button => button.addEventListener("click", () => selectPhotoStripSlot(Number(button.dataset.stripSlot))));
+    const zoom = document.querySelector("#photoStripZoom");
+    zoom.value = "1";
+    zoom.oninput = () => { if (!photoStripEditor) return; savePhotoStripUndo(); activeStripPhoto().zoom = Number(zoom.value); renderPhotoStripPreview(); };
+    canvas.width = Math.max(1, Math.round(template.width * photoStripEditor.canvasScale));
+    canvas.height = Math.max(1, Math.round(template.height * photoStripEditor.canvasScale));
+    canvas.onpointerdown = startPhotoStripPan;
+    canvas.onpointermove = movePhotoStripPan;
+    canvas.onpointerup = endPhotoStripPan;
+    canvas.onpointercancel = endPhotoStripPan;
+    renderPhotoStripPreview();
+    exportButton.disabled = false;
+    status.textContent = "ลากภาพเพื่อจัดตำแหน่ง · เลือกช่องด้านล่างเพื่อแก้แต่ละภาพ";
+  } catch (error) {
+    console.error("Could not prepare Photo Strip", error);
+    status.textContent = error.message || "เตรียม Photo Strip ไม่สำเร็จ";
+  } finally {
+    exportButton.disabled = !photoStripEditor;
+  }
+}
+
+function activeStripPhoto() { return photoStripEditor?.photos[photoStripEditor.active]; }
+function selectPhotoStripSlot(index) {
+  if (!photoStripEditor || index < 0 || index >= photoStripEditor.photos.length) return;
+  photoStripEditor.active = index;
+  document.querySelectorAll("[data-strip-slot]").forEach(button => button.classList.toggle("active", Number(button.dataset.stripSlot) === index));
+  document.querySelector("#photoStripZoom").value = String(activeStripPhoto().zoom);
+  renderPhotoStripPreview();
+}
+function savePhotoStripUndo() {
+  if (!photoStripEditor) return;
+  const item = activeStripPhoto();
+  photoStripEditor.undo.push({ index: photoStripEditor.active, zoom: item.zoom, panX: item.panX, panY: item.panY, rotation: item.rotation });
+  if (photoStripEditor.undo.length > 30) photoStripEditor.undo.shift();
+}
+function drawPhotoCover(ctx, bitmap, slot, edit) {
+  const x = slot.x * ctx.canvas.width, y = slot.y * ctx.canvas.height;
+  const width = slot.width * ctx.canvas.width, height = slot.height * ctx.canvas.height;
+  ctx.save(); ctx.beginPath(); ctx.rect(x, y, width, height); ctx.clip();
+  ctx.translate(x + width/2 + edit.panX*width, y + height/2 + edit.panY*height);
+  ctx.rotate(edit.rotation * Math.PI / 180);
+  const rotated = Math.abs(edit.rotation % 180) === 90;
+  const scale = Math.max(width/(rotated?bitmap.height:bitmap.width), height/(rotated?bitmap.width:bitmap.height)) * edit.zoom;
+  const renderedWidth = bitmap.width*scale, renderedHeight = bitmap.height*scale;
+  const maxPanX = Math.max(0, ((rotated?renderedHeight:renderedWidth)-width)/2), maxPanY = Math.max(0, ((rotated?renderedWidth:renderedHeight)-height)/2);
+  const shiftX = Math.max(-maxPanX, Math.min(maxPanX, edit.panX*width));
+  const shiftY = Math.max(-maxPanY, Math.min(maxPanY, edit.panY*height));
+  ctx.translate(shiftX, shiftY);
+  ctx.drawImage(bitmap, -renderedWidth/2, -renderedHeight/2, renderedWidth, renderedHeight);
+  ctx.restore();
+}
+function renderPhotoStripPreview() {
+  const state = photoStripEditor; if (!state) return;
+  const canvas = document.querySelector("#photoStripCanvas"), ctx = canvas.getContext("2d", { alpha: false, colorSpace: "srgb" });
+  ctx.fillStyle = state.theme.background_color || "#fff"; ctx.fillRect(0,0,canvas.width,canvas.height);
+  state.photos.forEach((photo,index) => drawPhotoCover(ctx, photo.bitmap, state.layout.slots[index], photo));
+  ctx.drawImage(state.template, 0,0,canvas.width,canvas.height);
+  const caption = String(state.theme.caption || "").trim();
+  if (caption) { ctx.save(); ctx.fillStyle = state.theme.text_color || "#222"; ctx.textAlign="center"; ctx.textBaseline="bottom"; ctx.font=`600 ${Math.max(14,canvas.width*.035)}px system-ui, sans-serif`; ctx.fillText(caption,canvas.width/2,canvas.height*.985,canvas.width*.82); ctx.restore(); }
+}
+function startPhotoStripPan(event) {
+  if (!photoStripEditor) return;
+  const state=photoStripEditor,item=activeStripPhoto();
+  state.pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(state.pointers.size===1){savePhotoStripUndo();state.drag={pointerId:event.pointerId,x:event.clientX,y:event.clientY,panX:item.panX,panY:item.panY,rect:event.currentTarget.getBoundingClientRect()};}
+  else if(state.pointers.size===2){const pts=[...state.pointers.values()];state.drag=null;state.pinch={distance:Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y),zoom:item.zoom};savePhotoStripUndo();}
+  event.currentTarget.setPointerCapture(event.pointerId);
+}
+function movePhotoStripPan(event) {
+  const state=photoStripEditor;if(!state?.pointers.has(event.pointerId))return;
+  state.pointers.set(event.pointerId,{x:event.clientX,y:event.clientY});
+  if(state.pinch&&state.pointers.size>=2){const pts=[...state.pointers.values()],distance=Math.max(1,Math.hypot(pts[0].x-pts[1].x,pts[0].y-pts[1].y));const item=activeStripPhoto();item.zoom=Math.max(1,Math.min(3,state.pinch.zoom*distance/state.pinch.distance));document.querySelector("#photoStripZoom").value=String(item.zoom);renderPhotoStripPreview();return;}
+  const drag=state.drag;if(!drag||drag.pointerId!==event.pointerId)return;
+  const item=activeStripPhoto();
+  if (item.zoom===1) { item.zoom=1.15; document.querySelector("#photoStripZoom").value="1.15"; }
+  item.panX=drag.panX+(event.clientX-drag.x)/drag.rect.width;
+  item.panY=drag.panY+(event.clientY-drag.y)/drag.rect.height;
+  renderPhotoStripPreview();
+}
+function endPhotoStripPan(event) { const state=photoStripEditor;if(!state)return;state.pointers.delete(event.pointerId);if(state.pointers.size<2)state.pinch=null;if(state.drag?.pointerId===event.pointerId)state.drag=null; }
+function rotatePhotoStripSlot(degrees) { if (!photoStripEditor) return; savePhotoStripUndo(); const item=activeStripPhoto(); item.rotation=(item.rotation+degrees+360)%360; renderPhotoStripPreview(); }
+function movePhotoStripSlot(direction) {
+  const state=photoStripEditor; if (!state) return; const next=state.active+direction;
+  if (next<0||next>=state.photos.length) return;
+  [state.photos[state.active],state.photos[next]]=[state.photos[next],state.photos[state.active]]; state.active=next;
+  const selected=document.querySelector("#photoStripSelectedPhotos");
+  selected.innerHTML=state.photos.map((entry,index)=>`<button type="button" class="photo-strip-photo-chip ${index===next?"active":""}" data-strip-slot="${index}"><img src="${freshDownloadUrl(entry.photo.preview)}" alt=""><span>${index+1}. ${escapeHtml(entry.photo.filename)}</span></button>`).join("");
+  selected.querySelectorAll("[data-strip-slot]").forEach(button=>button.addEventListener("click",()=>selectPhotoStripSlot(Number(button.dataset.stripSlot))));
+  renderPhotoStripPreview();
+}
+function resetPhotoStripSlot() { if (!photoStripEditor) return; savePhotoStripUndo(); const item=activeStripPhoto(); item.zoom=1;item.panX=0;item.panY=0;item.rotation=0;document.querySelector("#photoStripZoom").value="1";renderPhotoStripPreview(); }
+function undoPhotoStripEdit() {
+  const state=photoStripEditor, edit=state?.undo.pop(); if(!state||!edit)return showToast("ไม่มีการแก้ไขก่อนหน้า", "info");
+  const item=state.photos[edit.index];Object.assign(item,{zoom:edit.zoom,panX:edit.panX,panY:edit.panY,rotation:edit.rotation});state.active=edit.index;
+  document.querySelector("#photoStripZoom").value=String(item.zoom);renderPhotoStripPreview();
+}
+function closePhotoStripEditor() {
+  const dialog=document.querySelector("#photoStripEditorDialog"); if(dialog?.open)dialog.close();
+  photoStripEditor?.photos.forEach(item=>item.bitmap.close()); photoStripEditor?.template.close(); photoStripEditor=null; preparedPhotoStripFile=null;
+}
+async function exportPhotoStripJpg() {
+  const state=photoStripEditor; if(!state)return;
+  const button=document.querySelector("#exportPhotoStripButton"),status=document.querySelector("#photoStripEditorStatus");button.disabled=true;status.textContent="กำลังสร้างไฟล์ JPG…";
+  try {
+    const scale=Math.min(1,3000/state.template.width,5000/state.template.height),out=document.createElement("canvas");out.width=Math.max(1,Math.round(state.template.width*scale));out.height=Math.max(1,Math.round(state.template.height*scale));
+    const ctx=out.getContext("2d",{alpha:false,colorSpace:"srgb"});ctx.fillStyle=state.theme.background_color||"#fff";ctx.fillRect(0,0,out.width,out.height);
+    state.photos.forEach((photo,index)=>drawPhotoCover(ctx,photo.bitmap,state.layout.slots[index],photo));ctx.drawImage(state.template,0,0,out.width,out.height);
+    const caption=String(state.theme.caption||"").trim();if(caption){ctx.fillStyle=state.theme.text_color||"#222";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.font=`600 ${Math.max(18,out.width*.035)}px system-ui, sans-serif`;ctx.fillText(caption,out.width/2,out.height*.985,out.width*.82);}
+    const blob=await new Promise(resolve=>out.toBlob(resolve,"image/jpeg",.94));if(!blob||blob.size<100)throw new Error("สร้างไฟล์ JPG ไม่สำเร็จ");
+    const safe=galleryMeta.eventName.replace(/[\\/:*?"<>|]/g,"-").slice(0,50)||"photoflow";preparedPhotoStripFile=new File([blob],`${safe}-photo-strip-${state.count}.jpg`,{type:"image/jpeg"});
+    document.querySelector("#downloadPhotoStripButton").disabled=false;document.querySelector("#sharePhotoStripButton").disabled=false;status.textContent=`พร้อมดาวน์โหลด · JPG ${out.width} × ${out.height} px`;
+  }catch(error){console.error("Photo Strip export failed",error);status.textContent=error.message||"สร้างไฟล์ไม่สำเร็จ ลองอีกครั้ง";}
+  finally{button.disabled=false;}
+}
+function downloadPhotoStripJpg() {
+  if(!preparedPhotoStripFile)return;
+  const url=URL.createObjectURL(preparedPhotoStripFile),link=document.createElement("a");link.href=url;link.download=preparedPhotoStripFile.name;link.rel="noopener";link.style.display="none";document.body.appendChild(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);
+  if (!("download" in link)) window.open(url,"_blank","noopener");
+  showToast("เริ่มดาวน์โหลดไฟล์ Photo Strip แล้ว", "success");
+}
+async function sharePhotoStripJpg() {
+  if(!preparedPhotoStripFile)return;
+  if(navigator.share&&navigator.canShare?.({files:[preparedPhotoStripFile]})){
+    try{await navigator.share({files:[preparedPhotoStripFile],title:galleryMeta.eventName,text:"Photo Strip จากงาน "+galleryMeta.eventName});}
+    catch(error){if(error.name!=="AbortError")downloadPhotoStripJpg();}
+  }else downloadPhotoStripJpg();
 }
 
 function downloadSelectedPhotos(event) {

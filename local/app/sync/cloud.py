@@ -50,6 +50,9 @@ def event_payload(event: Event) -> dict[str, Any]:
     for key in ("sponsor_name", "sponsor_logo", "sponsor_hashtag", "sponsor_promo", "sponsor_promo_link"):
         gallery_settings.pop(key, None)
     gallery_settings["pin_hash"] = hashlib.sha256(pin.encode("utf-8")).hexdigest() if pin else ""
+    photo_strip = gallery_settings.get("photo_strip") if isinstance(gallery_settings.get("photo_strip"), dict) else {}
+    gallery_settings["photo_strip_enabled"] = bool(photo_strip.get("enabled"))
+    gallery_settings["photo_strip_config_json"] = json.dumps(photo_strip, ensure_ascii=False, separators=(",", ":"))
     return {
         "public_id": event.public_id,
         "name": event.name,
@@ -130,6 +133,84 @@ def delete(path: str, *, strict: bool = False) -> bool:
 
 def sync_event(event: Event, *, strict: bool = False) -> bool:
     return post("/api/sync/event", event_payload(event), strict=strict)
+
+
+def sync_card_template(event: Event, *, strict: bool = False) -> bool:
+    base = cloud_api_url()
+    path = Path(event.root_path) / "CACHE" / "card-template.png"
+    if not base or not path.is_file():
+        if strict:
+            raise CloudSyncError("Card template or Cloud API is unavailable")
+        return False
+    try:
+        try:
+            enabled_value = bool(json.loads(event.gallery_json or "{}").get("card_maker_enabled"))
+        except (json.JSONDecodeError, TypeError):
+            enabled_value = False
+        with httpx.Client(timeout=45) as client, path.open("rb") as template:
+            response = client.post(
+                f"{base}/api/sync/events/{event.public_id}/card-template",
+                files={"template": (path.name, template, "image/png")},
+                data={"enabled": str(enabled_value).lower()},
+                headers=sync_headers(),
+            )
+            response.raise_for_status()
+            return True
+    except Exception as exc:
+        log.warning("Cloud card template sync failed for %s: %s", event.public_id, exc)
+        if strict:
+            raise CloudSyncError(f"Cloud card template sync failed: {exc}") from exc
+        return False
+
+
+def sync_photo_strip_asset(event: Event, theme_id: str, photo_count: int, *, strict: bool = False) -> bool:
+    base = cloud_api_url()
+    path = Path(event.root_path) / "CACHE" / "photo-strip" / theme_id / f"{photo_count}.png"
+    if not base or photo_count not in (2, 3, 4) or not path.is_file():
+        if strict:
+            raise CloudSyncError("Photo Strip layout asset or Cloud API is unavailable")
+        return False
+    try:
+        # Workers can run SYNC_EVENT and asset jobs concurrently; post the latest
+        # config first so Cloud validates the uploaded PNG against current slots.
+        if not sync_event(event, strict=True):
+            raise CloudSyncError("Photo Strip theme config could not be synced")
+        with httpx.Client(timeout=45) as client, path.open("rb") as template:
+            response = client.post(
+                f"{base}/api/sync/events/{event.public_id}/photo-strip-asset",
+                files={"template": (path.name, template, "image/png")},
+                data={"theme_id": theme_id, "photo_count": str(photo_count)},
+                headers=sync_headers(),
+            )
+            response.raise_for_status()
+            return True
+    except Exception as exc:
+        log.warning("Cloud Photo Strip layout sync failed for %s (%s images): %s", event.public_id, photo_count, exc)
+        if strict:
+            raise CloudSyncError(f"Cloud Photo Strip layout sync failed: {exc}") from exc
+        return False
+
+
+def delete_photo_strip_asset(event: Event, theme_id: str, photo_count: int, *, strict: bool = False) -> bool:
+    base = cloud_api_url()
+    if not base:
+        if strict:
+            raise CloudSyncError("Cloud API is not configured")
+        return False
+    try:
+        with httpx.Client(timeout=30) as client:
+            response = client.delete(
+                f"{base}/api/sync/events/{event.public_id}/photo-strip-asset",
+                params={"theme_id": theme_id, "photo_count": photo_count},
+                headers=sync_headers(),
+            )
+            response.raise_for_status()
+            return True
+    except Exception as exc:
+        log.warning("Cloud Photo Strip layout delete failed for %s: %s", event.public_id, exc)
+        if strict:
+            raise CloudSyncError(f"Cloud Photo Strip layout delete failed: {exc}") from exc
+        return False
 
 
 def sync_photo(event: Event, photo: Photo, *, strict: bool = False) -> bool:

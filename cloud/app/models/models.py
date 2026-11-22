@@ -24,6 +24,8 @@ class Event(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     photos: Mapped[list["Photo"]] = relationship(back_populates="event", cascade="all, delete-orphan")
+    card_template: Mapped["CardTemplate | None"] = relationship(back_populates="event", cascade="all, delete-orphan", uselist=False)
+    photo_strip_assets: Mapped[list["PhotoStripAsset"]] = relationship(back_populates="event", cascade="all, delete-orphan")
 
 
 class Photo(Base):
@@ -63,6 +65,28 @@ class GallerySettings(Base):
     auto_refresh: Mapped[bool] = mapped_column(Boolean, default=True)
     credit_text: Mapped[str] = mapped_column(String(220), default="")
     report_contact: Mapped[str] = mapped_column(String(220), default="")
+    card_maker_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    card_template_name: Mapped[str] = mapped_column(String(160), default="")
+    photo_strip_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    photo_strip_config_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+class CardTemplate(Base):
+    __tablename__ = "card_templates"
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), primary_key=True)
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    event: Mapped[Event] = relationship(back_populates="card_template")
+
+
+class PhotoStripAsset(Base):
+    __tablename__ = "photo_strip_assets"
+    __table_args__ = (UniqueConstraint("event_id", "theme_id", "photo_count", name="uq_photo_strip_event_theme_count"),)
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, default=new_id)
+    event_id: Mapped[str] = mapped_column(ForeignKey("events.id", ondelete="CASCADE"), index=True)
+    theme_id: Mapped[str] = mapped_column(String(64), index=True)
+    photo_count: Mapped[int] = mapped_column(Integer)
+    image_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    event: Mapped[Event] = relationship(back_populates="photo_strip_assets")
 
 
 class SyncJob(Base):

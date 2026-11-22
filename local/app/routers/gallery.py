@@ -145,6 +145,17 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
     event = event_by_public_id(db, public_id)
     settings = gallery_settings(event)
     locked = not has_gallery_access(event, request)
+    strip = settings.get("photo_strip") if isinstance(settings.get("photo_strip"), dict) else {}
+    strip_themes = strip.get("themes") if isinstance(strip.get("themes"), list) else []
+    active_strip_theme = next((theme for theme in strip_themes if isinstance(theme, dict) and theme.get("id") == strip.get("active_theme_id")), None)
+    if active_strip_theme:
+        layouts = active_strip_theme.get("layouts") if isinstance(active_strip_theme.get("layouts"), dict) else {}
+        for count in (2, 3, 4):
+            layout = layouts.get(str(count)) if isinstance(layouts.get(str(count)), dict) else {}
+            layout["asset_present"] = (Path(event.root_path) / "CACHE" / "photo-strip" / active_strip_theme["id"] / f"{count}.png").is_file()
+            layouts[str(count)] = layout
+        active_strip_theme["layouts"] = layouts
+    strip_available = bool(active_strip_theme and all(active_strip_theme.get("layouts", {}).get(str(count), {}).get("asset_present") for count in (2, 3, 4)))
     count = 0 if locked else db.query(Photo).filter(Photo.event_id == event.id, Photo.published == True, Photo.hidden == False).count()
     return {
         "event": {
@@ -158,10 +169,28 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
             "find_my_photos": False,
             "credit_text": settings.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO",
             "report_contact": settings.get("report_contact") or "",
+            "card_maker_enabled": bool(settings.get("card_maker_enabled")) and bool(settings.get("allow_download", True)) and not locked and (Path(event.root_path) / "CACHE" / "card-template.png").is_file(),
+            "card_template_name": settings.get("card_template_name") or "",
+            "photo_strip_enabled": bool(strip.get("enabled") and settings.get("allow_download", True) and not locked and strip_available),
+            "photo_strip_theme": active_strip_theme,
             "locked": locked,
             "requires_pin": bool(gallery_pin(event)),
         },
     }
+
+
+@router.get("/{public_id}/card-template.png")
+def card_template(public_id: str, request: Request, db: Session = Depends(get_db)):
+    event = event_by_public_id(db, public_id)
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
+    settings = gallery_settings(event)
+    if not settings.get("card_maker_enabled") or not settings.get("allow_download", True):
+        raise HTTPException(404, "Card maker is disabled")
+    path = Path(event.root_path) / "CACHE" / "card-template.png"
+    if not path.is_file():
+        raise HTTPException(404, "Card template not found")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @router.get("/{public_id}/qr.png")
@@ -274,3 +303,23 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
         "gallery_url": public_gallery_url(db, event.public_id),
         "links": result,
     }
+
+
+@router.get("/{public_id}/photo-strip/{theme_id}/{photo_count}.png")
+def photo_strip_template(public_id: str, theme_id: str, photo_count: int, request: Request, db: Session = Depends(get_db)):
+    event = event_by_public_id(db, public_id)
+    if not has_gallery_access(event, request):
+        require_gallery_access(event)
+    settings = gallery_settings(event)
+    strip = settings.get("photo_strip") if isinstance(settings.get("photo_strip"), dict) else {}
+    if not strip.get("enabled") or not settings.get("allow_download", True):
+        raise HTTPException(404, "Photo Strip is disabled")
+    if photo_count not in (2, 3, 4) or theme_id != strip.get("active_theme_id"):
+        raise HTTPException(404, "Photo Strip layout not found")
+    theme = next((item for item in strip.get("themes", []) if isinstance(item, dict) and item.get("id") == theme_id), None)
+    if not theme or not theme.get("layouts", {}).get(str(photo_count), {}).get("template_name"):
+        raise HTTPException(404, "Photo Strip layout is not configured")
+    path = Path(event.root_path) / "CACHE" / "photo-strip" / theme_id / f"{photo_count}.png"
+    if not path.is_file():
+        raise HTTPException(404, "Photo Strip layout asset not found")
+    return FileResponse(path, media_type="image/png", headers={"Cache-Control": "private, max-age=300"})

@@ -46,24 +46,6 @@ const checkLabels = {
   public_gallery_url: "ลิงก์แกลเลอรี่",
   google_drive: "Google Drive"
 };
-const photoboothThemes = {
-  halloween: {
-    label: "ฮาโลวีน · Pumpkin Night",
-    portrait: "/frames/halloween-portrait.png?v=4",
-    landscape: "/frames/halloween-landscape.png?v=4"
-  },
-  songkran: { label: "สงกรานต์ · Water Festival" },
-  "loy-krathong": { label: "ลอยกระทง · แสงจันทร์" },
-  "mothers-day": { label: "วันแม่ · ดอกมะลิ" },
-  "fathers-day": { label: "วันพ่อ · โทนเหลือง" },
-  graduation: { label: "รับปริญญา · Navy & Gold" },
-  "new-year": { label: "คริสต์มาส · ปีใหม่" },
-  valentines: { label: "วาเลนไทน์ · Rose" },
-  birthday: { label: "วันเกิด · Celebration" },
-  "chinese-new-year": { label: "ตรุษจีน · มงคล" },
-  wedding: { label: "งานแต่ง · หมั้น" }
-};
-
 function nav(active) {
   return `<aside class="nav">
     <a class="brand" href="/" aria-label="CS.BXXM STUDIO หน้าหลัก">
@@ -424,6 +406,141 @@ async function shareGallery(url, name) {
   await navigator.clipboard.writeText(text);
   alert("คัดลอกข้อความสำหรับส่งต่อแล้ว");
 }
+function cardTemplateStarterResources() {
+  return `<div class="card-template-starter"><div class="card-template-starter-links"><a class="button" href="/static/assets/card-template-starter.pptx" download>⬇ ไฟล์แก้ไขใน Canva (.pptx)</a><a class="button secondary" href="/static/assets/card-template-starter.png" download>⬇ PNG พร้อมใช้</a></div><img src="/static/assets/card-template-starter.png" alt="ตัวอย่างเทมเพลตการ์ดภาพ 4 ช่อง" loading="lazy"><small class="muted">เปิดไฟล์ PPTX ใน Canva แล้วแก้ข้อความ สี และองค์ประกอบ จากนั้นดาวน์โหลดเป็น PNG แล้วอัปโหลดกลับ ระบบจะลบพื้นขาวและเจาะช่องภาพให้อัตโนมัติ</small></div>`;
+}
+function defaultPhotoStripSlots(count) {
+  if (count===4) return Array.from({length:4},(_,index)=>({x:.12,y:+(.16+index*.19).toFixed(4),width:.76,height:.165}));
+  const height = ({2:.27,3:.205,4:.165})[count];
+  const gap = ({2:.07,3:.05,4:.025})[count];
+  const top = (1 - count*height - (count-1)*gap) / 2;
+  return Array.from({length:count}, (_, index) => ({x:.12,y:+(top+index*(height+gap)).toFixed(4),width:.76,height}));
+}
+function newPhotoStripTheme() {
+  const id = globalThis.crypto?.randomUUID?.().replaceAll("-", "") || `theme-${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  return {id,name:"ธีมใหม่",description:"",background_color:"#FFFFFF",accent_color:"#E98672",text_color:"#33283F",caption:"",layouts:Object.fromEntries([2,3,4].map(count=>[String(count),{slots:defaultPhotoStripSlots(count),template_name:"",asset_present:false}]))};
+}
+function photoStripAdminHtml() {
+  return `<section class="photo-strip-admin"><p class="kicker">PHOTO STRIP THEME STUDIO</p><h2>ธีม Photo Strip</h2><p class="muted">สร้างหลายธีมและเตรียมไฟล์กรอบแยกสำหรับ 2, 3 และ 4 ภาพ ลูกค้าเลือกได้เฉพาะภาพและปรับการครอป</p><div id="photoStripThemeManager"><p class="muted">กำลังโหลดธีม…</p></div></section>`;
+}
+function capturePhotoStripThemeForm() {
+  const state = window.photoStripAdminState;
+  if (!state) return;
+  const theme = state.themes.find(item=>item.id===state.activeThemeId);
+  if (!theme) return;
+  for (const key of ["name","description","background_color","accent_color","text_color","caption"]) {
+    const input = document.querySelector(`#photoStripThemeManager [name="${key}"]`);
+    if (input) theme[key] = input.value;
+  }
+  document.querySelectorAll("#photoStripThemeManager .photo-strip-slot-row").forEach(row => {
+    const slot = {};
+    for (const key of ["x","y","width","height"]) slot[key] = Number(row.querySelector(`[name="${key}"]`).value) / 100;
+    theme.layouts[String(state.layoutCount)].slots[Number(row.dataset.slot)] = slot;
+  });
+  state.enabled = Boolean(document.querySelector("#photoStripEnabled")?.checked);
+}
+function renderPhotoStripThemeManager() {
+  const root = document.querySelector("#photoStripThemeManager");
+  const state = window.photoStripAdminState;
+  if (!root || !state) return;
+  const theme = state.themes.find(item=>item.id===state.activeThemeId);
+  root.innerHTML = `<div class="photo-strip-admin-bar"><label class="check"><input id="photoStripEnabled" type="checkbox" ${state.enabled?"checked":""}> เปิดให้ลูกค้าใช้ Photo Strip</label><label><span>ธีมที่ใช้งาน</span><select id="photoStripThemeSelect">${state.themes.map(item=>`<option value="${html(item.id)}" ${item.id===state.activeThemeId?"selected":""}>${html(item.name)}</option>`).join("")}</select></label><button type="button" class="secondary" id="newPhotoStripTheme">＋ สร้างธีม</button><button type="button" class="secondary" id="addPhotoStripStarter">เพิ่มธีมตัวอย่าง</button><button type="button" class="secondary" id="deletePhotoStripTheme" ${theme?"":"disabled"}>ลบธีม</button></div>${theme?`<div class="photo-strip-theme-fields"><label><span>ชื่อธีม</span><input name="name" maxlength="80" value="${html(theme.name)}"></label><label><span>คำอธิบาย</span><input name="description" maxlength="300" value="${html(theme.description||"")}"></label><label><span>สีพื้นหลัง JPG</span><input type="color" name="background_color" value="${html(theme.background_color)}"></label><label><span>สีตกแต่ง</span><input type="color" name="accent_color" value="${html(theme.accent_color)}"></label><label><span>สีข้อความ</span><input type="color" name="text_color" value="${html(theme.text_color)}"></label><label><span>ข้อความท้ายแถบ</span><input name="caption" maxlength="100" value="${html(theme.caption||"")}" placeholder="ชื่องาน / วันที่"></label></div><div class="photo-strip-layout-tabs">${[2,3,4].map(count=>`<button type="button" class="${state.layoutCount===count?"active":"secondary"}" data-photo-strip-count="${count}">${count} ภาพ</button>`).join("")}</div><div class="photo-strip-slot-editor">${theme.layouts[String(state.layoutCount)].slots.map((slot,index)=>`<div class="photo-strip-slot-row" data-slot="${index}"><b>ช่อง ${index+1}</b>${[["x","ซ้าย"],["y","บน"],["width","กว้าง"],["height","สูง"]].map(([key,label])=>`<label><span>${label} %</span><input type="number" name="${key}" min="0" max="100" step="1" value="${Math.round(slot[key]*100)}"></label>`).join("")}</div>`).join("")}</div><div class="photo-strip-layout-upload"><span>${theme.layouts[String(state.layoutCount)].asset_present?`ไฟล์กรอบพร้อม: ${html(theme.layouts[String(state.layoutCount)].template_name||"PNG")}`:"ยังไม่มีไฟล์กรอบสำหรับ Layout นี้"}</span><a class="button secondary" href="/static/assets/photo-strip-festival-${state.layoutCount}-canva.pptx" download>เทมเพลต Canva</a><label class="button secondary">เลือก PNG<input id="photoStripLayoutFile" type="file" accept="image/png,.png" hidden></label><button type="button" id="uploadPhotoStripLayout">อัปโหลด Layout ${state.layoutCount} ภาพ</button></div>${theme.layouts[String(state.layoutCount)].asset_present?`<div class="photo-strip-layout-preview"><img src="/api/events/${encodeURIComponent(state.eventId)}/photo-strip/themes/${encodeURIComponent(theme.id)}/layouts/${state.layoutCount}.png?v=${Date.now()}" alt="ตัวอย่างกรอบ ${state.layoutCount} ภาพ"></div>`:""}<div class="photo-strip-real-preview-actions"><button type="button" class="secondary" id="previewPhotoStripWithPhotos" ${theme.layouts[String(state.layoutCount)].asset_present?"":"disabled"}>ดูตัวอย่างกับรูปล่าสุดในงาน</button><small class="muted">ใช้รูปที่เผยแพร่ในแกลเลอรีจริง หากมีรูปไม่ครบจะแจ้งจำนวนที่ต้องเพิ่ม</small></div><canvas id="photoStripAdminPreview" width="600" height="1800" hidden aria-label="ตัวอย่าง Photo Strip พร้อมภาพจากอีเวนต์"></canvas><small class="muted">ใช้ไฟล์ PNG แนวตั้งโปร่งใส; โลโก้และลายตกแต่งใส่ไว้ใน PNG ได้ ระบบแยก Layout 2/3/4 ภาพ ขนาดไฟล์ 300–5000 px ไม่เกิน 8 MB</small>`:`<p class="muted">ยังไม่มีธีม กด “สร้างธีม” หรือ “เพิ่มธีมตัวอย่าง” เพื่อเริ่มต้น</p>`}<div class="row photo-strip-admin-actions"><button type="button" id="savePhotoStripTheme">บันทึกธีมและสิทธิ์</button></div><small id="photoStripAdminStatus" class="muted" aria-live="polite"></small>`;
+  root.querySelector("#photoStripThemeSelect")?.addEventListener("change",event=>{capturePhotoStripThemeForm();state.activeThemeId=event.currentTarget.value;renderPhotoStripThemeManager();});
+  root.querySelectorAll("[data-photo-strip-count]").forEach(button=>button.addEventListener("click",()=>{capturePhotoStripThemeForm();state.layoutCount=Number(button.dataset.photoStripCount);renderPhotoStripThemeManager();}));
+  root.querySelector("#newPhotoStripTheme")?.addEventListener("click",()=>{capturePhotoStripThemeForm();const fresh=newPhotoStripTheme();state.themes.push(fresh);state.activeThemeId=fresh.id;renderPhotoStripThemeManager();});
+  root.querySelector("#deletePhotoStripTheme")?.addEventListener("click",async()=>{if(!theme||!confirm(`ลบธีม “${theme.name}” และไฟล์ Layout ทั้งหมด?`))return;try{await api(`/api/events/${state.eventId}/photo-strip/themes/${encodeURIComponent(theme.id)}`,{method:"DELETE"});state.themes=state.themes.filter(item=>item.id!==theme.id);state.activeThemeId=state.themes[0]?.id||"";state.enabled=state.enabled&&Boolean(state.activeThemeId);renderPhotoStripThemeManager();}catch(error){alert(`ลบธีมไม่สำเร็จ\n\n${error.message}`);}});
+  root.querySelector("#savePhotoStripTheme")?.addEventListener("click",savePhotoStripTheme);
+  root.querySelector("#uploadPhotoStripLayout")?.addEventListener("click",uploadPhotoStripLayout);
+  root.querySelector("#addPhotoStripStarter")?.addEventListener("click",addPhotoStripStarterTheme);
+  root.querySelector("#previewPhotoStripWithPhotos")?.addEventListener("click",previewPhotoStripWithEventPhotos);
+}
+async function loadPhotoStripAdminSettings(eventId) {
+  const data=await api(`/api/events/${eventId}/photo-strip`);
+  window.photoStripAdminState={eventId,enabled:Boolean(data.enabled),activeThemeId:data.active_theme_id||data.themes[0]?.id||"",layoutCount:4,themes:data.themes||[]};
+  renderPhotoStripThemeManager();
+}
+async function addPhotoStripStarterTheme() {
+  const state=window.photoStripAdminState;if(!state)return;
+  capturePhotoStripThemeForm();
+  const status=document.querySelector("#photoStripAdminStatus"),button=document.querySelector("#addPhotoStripStarter");
+  const previousActive=state.activeThemeId,keepEnabled=state.enabled;
+  const theme=newPhotoStripTheme();
+  Object.assign(theme,{name:"Festival · Classic",description:"เทมเพลตตัวอย่างโทนครีม ชมพูอุ่น และทอง ปรับต่อใน Canva ได้",background_color:"#33283F",accent_color:"#E98672",text_color:"#F7EBDD",caption:""});
+  state.themes.push(theme);
+  if(button)button.disabled=true;
+  if(status)status.textContent="กำลังเพิ่มธีมตัวอย่างและ Layout 2/3/4 ภาพ…";
+  try{
+    await api(`/api/events/${state.eventId}/photo-strip`,{method:"PUT",body:JSON.stringify({enabled:Boolean(keepEnabled&&previousActive),active_theme_id:previousActive||theme.id,themes:state.themes})});
+    for(const count of [2,3,4]){
+      const response=await fetch(`/static/assets/photo-strip-festival-${count}.png`,{cache:"no-store"});
+      if(!response.ok)throw new Error(`ไม่พบไฟล์ตัวอย่าง Layout ${count} ภาพ`);
+      const fileBlob=await response.blob(),form=new FormData();
+      form.append("template",new File([fileBlob],`photo-strip-festival-${count}.png`,{type:"image/png"}));
+      await api(`/api/events/${state.eventId}/photo-strip/themes/${encodeURIComponent(theme.id)}/layouts/${count}`,{method:"POST",body:form,headers:{}});
+    }
+    await api(`/api/events/${state.eventId}/photo-strip`,{method:"PUT",body:JSON.stringify({enabled:keepEnabled,active_theme_id:theme.id,themes:state.themes})});
+    const latest=await api(`/api/events/${state.eventId}/photo-strip`);
+    Object.assign(state,{enabled:Boolean(latest.enabled),activeThemeId:latest.active_theme_id||theme.id,themes:latest.themes||[]});
+    renderPhotoStripThemeManager();
+    const refreshedStatus=document.querySelector("#photoStripAdminStatus");
+    if(refreshedStatus)refreshedStatus.textContent="เพิ่มธีมตัวอย่างพร้อม Layout 2/3/4 ภาพแล้ว · ตรวจตัวอย่างก่อนเปิดให้ลูกค้าใช้ได้เลย";
+  }catch(error){
+    status.textContent=`เพิ่มธีมตัวอย่างไม่ครบ: ${error.message} · ธีมที่เพิ่มไว้ยังแก้ไขต่อได้`;
+    if(button)button.disabled=false;
+  }
+}
+async function previewPhotoStripWithEventPhotos() {
+  const state=window.photoStripAdminState;if(!state)return;
+  capturePhotoStripThemeForm();
+  const theme=state.themes.find(item=>item.id===state.activeThemeId),count=state.layoutCount,layout=theme?.layouts?.[String(count)];
+  const canvas=document.querySelector("#photoStripAdminPreview"),status=document.querySelector("#photoStripAdminStatus"),button=document.querySelector("#previewPhotoStripWithPhotos");
+  if(!theme||!layout?.asset_present||!canvas)return;
+  if(button)button.disabled=true;
+  if(status)status.textContent="กำลังดึงรูปล่าสุดในแกลเลอรีมาจัดตัวอย่าง…";
+  try{
+    const photos=await api(`/api/events/${state.eventId}/gallery-photos?page_size=100`);
+    if(photos.length<count)throw new Error(`มีรูปที่เผยแพร่แล้ว ${photos.length} รูป ต้องมีอย่างน้อย ${count} รูปเพื่อดูตัวอย่างนี้`);
+    const frameResponse=await fetch(`/api/events/${state.eventId}/photo-strip/themes/${encodeURIComponent(theme.id)}/layouts/${count}.png?v=${Date.now()}`,{cache:"no-store"});
+    if(!frameResponse.ok)throw new Error("โหลดกรอบตัวอย่างไม่สำเร็จ");
+    const frame=await createImageBitmap(await frameResponse.blob()),ctx=canvas.getContext("2d");
+    canvas.width=frame.width;canvas.height=frame.height;
+    ctx.fillStyle=theme.background_color||"#fff";ctx.fillRect(0,0,canvas.width,canvas.height);
+    for(let index=0;index<count;index++){
+      const photo=photos[index],url=photo.preview||photo.finished;
+      if(!url)throw new Error(`รูป ${photo.filename||index+1} ไม่มีไฟล์ตัวอย่าง`);
+      const response=await fetch(url,{cache:"no-store"});if(!response.ok)throw new Error(`โหลดรูป ${photo.filename||index+1} ไม่สำเร็จ`);
+      const bitmap=await createImageBitmap(await response.blob(),{imageOrientation:"from-image"});
+      const slot=layout.slots[index],x=slot.x*canvas.width,y=slot.y*canvas.height,w=slot.width*canvas.width,h=slot.height*canvas.height,scale=Math.max(w/bitmap.width,h/bitmap.height);
+      ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(bitmap,x+(w-bitmap.width*scale)/2,y+(h-bitmap.height*scale)/2,bitmap.width*scale,bitmap.height*scale);ctx.restore();bitmap.close();
+    }
+    ctx.drawImage(frame,0,0,canvas.width,canvas.height);
+    const caption=String(theme.caption||"").trim();
+    if(caption){ctx.fillStyle=theme.text_color||"#222";ctx.textAlign="center";ctx.textBaseline="bottom";ctx.font=`600 ${Math.max(14,canvas.width*.035)}px system-ui,sans-serif`;ctx.fillText(caption,canvas.width/2,canvas.height*.985,canvas.width*.82);}
+    frame.close();
+    canvas.hidden=false;if(status)status.textContent=`ตัวอย่างจากรูปล่าสุด ${count} รูป · ${canvas.width} × ${canvas.height} px`;
+  }catch(error){if(status)status.textContent=error.message||"ทำตัวอย่างไม่สำเร็จ";canvas.hidden=true;}
+  finally{if(button)button.disabled=false;}
+}
+async function savePhotoStripTheme() {
+  const state=window.photoStripAdminState;if(!state)return;capturePhotoStripThemeForm();
+  const status=document.querySelector("#photoStripAdminStatus");
+  try{const result=await api(`/api/events/${state.eventId}/photo-strip`,{method:"PUT",body:JSON.stringify({enabled:state.enabled,active_theme_id:state.activeThemeId,themes:state.themes})});state.enabled=result.enabled;state.activeThemeId=result.active_theme_id;const next=await api(`/api/events/${state.eventId}/photo-strip`);state.themes=next.themes;status.textContent="บันทึกธีมแล้ว";renderPhotoStripThemeManager();}catch(error){status.textContent=error.message;status.classList.add("badtext");}
+}
+async function uploadPhotoStripLayout() {
+  const state=window.photoStripAdminState;const file=document.querySelector("#photoStripLayoutFile")?.files?.[0];
+  if(!state||!file)return;capturePhotoStripThemeForm();
+  try{
+    const selectedTheme=state.themes.find(item=>item.id===state.activeThemeId);
+    const canKeepEnabled=Boolean(selectedTheme&&[2,3,4].every(count=>selectedTheme.layouts[String(count)]?.asset_present));
+    const saved=await api(`/api/events/${state.eventId}/photo-strip`,{method:"PUT",body:JSON.stringify({enabled:Boolean(state.enabled&&canKeepEnabled),active_theme_id:state.activeThemeId,themes:state.themes})});
+    state.enabled=saved.enabled;
+    const form=new FormData();form.append("template",file,file.name);
+    await api(`/api/events/${state.eventId}/photo-strip/themes/${encodeURIComponent(state.activeThemeId)}/layouts/${state.layoutCount}`,{method:"POST",body:form,headers:{}});
+    const latest=await api(`/api/events/${state.eventId}/photo-strip`);state.themes=latest.themes;state.activeThemeId=latest.active_theme_id||state.activeThemeId;state.enabled=Boolean(latest.enabled);
+    document.querySelector("#photoStripAdminStatus").textContent=`อัปโหลด Layout ${state.layoutCount} ภาพแล้ว`;
+    renderPhotoStripThemeManager();
+  }catch(error){document.querySelector("#photoStripAdminStatus").textContent=error.message;document.querySelector("#photoStripAdminStatus").classList.add("badtext");}
+}
 async function rebuildPhotos(id) {
   if (!confirm("สร้างไฟล์ Gallery ใหม่จาก ORIGINAL ทั้งหมด?")) return;
   const result = await api(`/api/events/${id}/photos/reprocess`, { method: "POST" });
@@ -458,7 +575,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">PHOTO BOOTH THEME LIBRARY</p><h2>เลือกกรอบและธีม</h2><p class="muted">เลือกธีมสำเร็จรูป หรืออัปโหลดกรอบ PNG ระบบตรวจแนวตั้ง/แนวนอนและจัดให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>คลังกรอบเทศกาล</span><select id="frameTheme"><option value="">เลือกกรอบที่เตรียมไว้</option><option value="halloween">ฮาโลวีน · Pumpkin Night</option><option value="songkran">สงกรานต์ · Water Festival</option><option value="loy-krathong">ลอยกระทง · แสงจันทร์</option><option value="mothers-day">วันแม่ · ดอกมะลิ</option><option value="fathers-day">วันพ่อ · โทนเหลือง</option><option value="graduation">รับปริญญา · Navy &amp; Gold</option><option value="new-year">คริสต์มาส · ปีใหม่</option><option value="valentines">วาเลนไทน์ · Rose</option><option value="birthday">วันเกิด · Celebration</option><option value="chinese-new-year">ตรุษจีน · มงคล</option><option value="wedding">งานแต่ง · หมั้น</option></select></label><label><span>อัปโหลดกรอบ PNG (เลือกได้ 1–2 ไฟล์ ระบบตรวจทิศทางให้เอง · ไฟล์ละไม่เกิน 20 MB)</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">กรอบต้องมีช่องโปร่งใสตรงกลาง เพื่อให้เห็นภาพถ่ายด้านใน</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ตัวอย่างกรอบอัตโนมัติ</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบหนึ่งหรือสองแนว ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG ที่มีพื้นหลังโปร่งใสตรงกลาง เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG ที่เจาะช่องโปร่งใสตรงกลาง</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -466,9 +583,9 @@ async function loadEvents() {
     <h2>สำรองรูปด้วย Google Drive</h2><div class="checks"><label class="check"><input type="checkbox" name="upload_finished_photos" checked>อัปโหลดรูปพร้อมดาวน์โหลดก่อนเผยแพร่</label><label class="check"><input type="checkbox" name="upload_originals">สำรองไฟล์ต้นฉบับ</label></div>
     <button>สร้างงานถ่ายภาพ</button>
   </form><section class="panel span-5"><div class="preview-head"><div><h2>งานในระบบ</h2><p class="muted">ข้อมูลจากฐานข้อมูลและโฟลเดอร์งานจริงในเครื่อง</p></div><button type="button" class="secondary" onclick="loadImportableEvents()">ค้นหางานจากโฟลเดอร์</button></div><div id="eventsList"></div><div id="importableList"></div><div id="created"></div></section></div>`);
+  document.querySelector(".frame-setup")?.insertAdjacentHTML("afterend", `<section class="frame-setup card-maker-setup"><p class="kicker">CUSTOM PHOTO CARD</p><h2>การ์ดภาพสำหรับลูกค้า</h2><p class="muted">แอดมินเลือกเปิดหรือปิดฟีเจอร์นี้ได้ในแต่ละงาน เมื่อเปิดใช้ ลูกค้าจะเลือกภาพ 4 รูปมาจัดเป็นแถบการ์ดและดาวน์โหลดหรือแชร์ได้</p>${cardTemplateStarterResources()}<label class="check"><input type="checkbox" name="card_maker_enabled">เปิดให้ลูกค้าทำการ์ดภาพในแกลเลอรี</label><label><span>เทมเพลตการ์ด PNG · แนวตั้ง · ไม่เกิน 8 MB</span><input id="cardTemplateFile" type="file" accept="image/png,.png"></label><small id="cardTemplateStatus" class="muted">แนะนำ 600 × 1800 px · เว้นช่องโปร่งใส 4 ช่องเรียงลงมาตรงกลางสำหรับวางรูป</small></section>`);
   $("#eventForm").addEventListener("submit", createEvent);
   $("#photoboothFrameFiles").addEventListener("change", previewPhotoboothFrame);
-  $("#frameTheme").addEventListener("change", selectPhotoboothTheme);
   $("#framePreviewPhoto").addEventListener("change", previewFramePhoto);
   ["frameScale", "frameOffsetX", "frameOffsetY"].forEach(id => $("#" + id).addEventListener("input", updateFramePreviewTransform));
   renderEvents();
@@ -510,6 +627,54 @@ async function inspectPhotoboothFrame(file) {
   }
 }
 
+async function inspectCardTemplate(file) {
+  if (file.size > 8 * 1024 * 1024) throw new Error("เทมเพลตต้องมีขนาดไม่เกิน 8 MB");
+  if (file.size < 24) throw new Error("ไฟล์เทมเพลต PNG ไม่สมบูรณ์");
+  if (!file.name.toLowerCase().endsWith(".png")) throw new Error("เทมเพลตต้องเป็นไฟล์ PNG");
+  const signature = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+  if (signature.length !== 8 || signature.some((byte, index) => byte !== [137,80,78,71,13,10,26,10][index])) throw new Error("ไฟล์นี้ไม่ใช่ PNG ที่ถูกต้อง");
+  const header = new DataView(await file.slice(16, 24).arrayBuffer());
+  const declaredWidth = header.getUint32(0);
+  const declaredHeight = header.getUint32(4);
+  if (declaredWidth < 300 || declaredHeight < 300 || declaredWidth > 5000 || declaredHeight > 5000 || declaredWidth >= declaredHeight) {
+    throw new Error("เทมเพลตต้องเป็นแนวตั้ง ขนาด 300–5,000 พิกเซล และสูงกว่ากว้าง");
+  }
+  const bitmap = await createImageBitmap(file);
+  try {
+    if (Math.min(bitmap.width, bitmap.height) < 300 || Math.max(bitmap.width, bitmap.height) > 5000 || bitmap.width >= bitmap.height) {
+      throw new Error("เทมเพลตต้องเป็นแนวตั้ง ขนาด 300–5,000 พิกเซล และสูงกว่ากว้าง");
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = 100; canvas.height = 100;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.clearRect(0, 0, 100, 100); ctx.drawImage(bitmap, 0, 0, 100, 100);
+    const data = ctx.getImageData(0, 0, 100, 100).data;
+    let visible = 0; let designPixels = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] > 10) visible++;
+      if (data[i + 3] > 10 && Math.min(data[i], data[i + 1], data[i + 2]) < 248) designPixels++;
+    }
+    if (!visible || designPixels < 30) throw new Error("เทมเพลตต้องมีลายตกแต่งและช่องว่างสำหรับภาพ");
+    const transparentSlots = []; const whiteSlots = [];
+    for (const cy of [.2425,.4325,.6225,.8125]) {
+      const x0 = 35, x1 = 65;
+      const y0 = Math.round((cy-.05)*100), y1 = Math.round((cy+.05)*100);
+      let clear = 0;
+      let white = 0;
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+        const i = (y*100+x)*4;
+        if (data[i+3] < 40) clear++;
+        if (data[i+3] >= 240 && Math.min(data[i],data[i+1],data[i+2]) >= 248) white++;
+      }
+      const area = (x1-x0)*(y1-y0);
+      transparentSlots.push(clear >= area*.6);
+      whiteSlots.push(white >= area*.6);
+    }
+    if (!transparentSlots.every(Boolean) && !whiteSlots.every(Boolean)) throw new Error("เทมเพลตต้องมีช่องภาพ 4 ช่องเรียงลงมาตรงกลาง หรือช่องสีขาวที่ระบบจะตัดให้");
+    return { width: bitmap.width, height: bitmap.height };
+  } finally { bitmap.close(); }
+}
+
 function releaseFramePreviewUrls() {
   (window.__framePreviewUrls || []).forEach(url => URL.revokeObjectURL(url));
   window.__framePreviewUrls = [];
@@ -524,7 +689,6 @@ async function previewPhotoboothFrame(ev) {
   window.__frameSelectionToken = token;
   window.frameSelectionLoading = true;
   const files = [...(input.files || [])];
-  $("#frameTheme").value = "";
   window.activePhotoboothFrames = null;
   releaseFramePreviewUrls();
   if (!files.length) {
@@ -569,47 +733,6 @@ async function previewPhotoboothFrame(ev) {
   }
 }
 
-async function selectPhotoboothTheme(ev) {
-  const themeName = ev.currentTarget.value;
-  const token = (window.__frameSelectionToken || 0) + 1;
-  window.__frameSelectionToken = token;
-  const theme = photoboothThemes[themeName];
-  releaseFramePreviewUrls();
-  if (!theme) {
-    await previewPhotoboothFrame({ currentTarget: $("#photoboothFrameFiles") });
-    return;
-  }
-  window.frameSelectionLoading = true;
-  try {
-    $("#photoboothFrameFiles").value = "";
-    window.activePhotoboothFrames = null;
-    $("[name=photobooth_frame_enabled]").checked = false;
-    setFrameAutoStatus(`กำลังเตรียมธีม${theme.label}…`);
-    const frames = {};
-    for (const orientation of ["landscape", "portrait"]) {
-      const source = theme[orientation] || `/api/events/frame-themes/${themeName}/${orientation}.png?v=20261120-art4`;
-      const response = await fetch(source, { cache: "force-cache" });
-      if (!response.ok) throw new Error("โหลดไฟล์กรอบไม่สำเร็จ");
-      const blob = await response.blob();
-      if (window.__frameSelectionToken !== token) return;
-      frames[orientation] = await inspectPhotoboothFrame(new File([blob], `${themeName}-${orientation}.png`, { type: "image/png" }));
-    }
-    if (window.__frameSelectionToken !== token) return;
-    window.activePhotoboothFrames = frames;
-    window.frameSelectionLoading = false;
-    $("[name=photobooth_frame_enabled]").checked = true;
-    setFrameAutoStatus("ธีมมีกรอบครบสองแนว ระบบเลือกและจัดให้ตรงกับรูปแต่ละใบแล้ว");
-    refreshPhotoboothFramePreview();
-  } catch (err) {
-    if (window.__frameSelectionToken !== token) return;
-    window.frameSelectionLoading = false;
-    ev.currentTarget.value = "";
-    window.activePhotoboothFrames = null;
-    setFrameAutoStatus(err.message || "โหลดชุดกรอบไม่สำเร็จ", true);
-    showToast(err.message || "โหลดชุดกรอบไม่สำเร็จ", "error");
-  }
-}
-
 function previewFramePhoto(ev) {
   const file = ev.currentTarget.files?.[0];
   const preview = $("#framePhotoPreviewImage");
@@ -618,12 +741,15 @@ function previewFramePhoto(ev) {
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
+    preview.style.cssText = "";
     refreshPhotoboothFramePreview();
     return;
   }
   window.__framePhotoPreviewUrl = URL.createObjectURL(file);
   preview.onload = () => {
-    $("#frameSample").style.aspectRatio = `${preview.naturalWidth} / ${preview.naturalHeight}`;
+    const frames = window.activePhotoboothFrames || {};
+    const orientation = preview.naturalWidth >= preview.naturalHeight ? "landscape" : "portrait";
+    if (!frames[orientation]) $("#frameSample").style.aspectRatio = `${preview.naturalWidth} / ${preview.naturalHeight}`;
     refreshPhotoboothFramePreview();
   };
   preview.onerror = () => setFrameAutoStatus("เปิดภาพตัวอย่างไม่ได้ กรุณาเลือกไฟล์รูปอื่น", true);
@@ -648,6 +774,10 @@ function refreshPhotoboothFramePreview() {
   if (!frame) {
     overlay.hidden = true;
     overlay.removeAttribute("src");
+    if (photo) {
+      photo.style.cssText = "";
+      if (photo.naturalWidth && !photo.hidden) sample.style.aspectRatio = `${photo.naturalWidth} / ${photo.naturalHeight}`;
+    }
     const label = orientation === "landscape" ? "แนวนอน" : "แนวตั้ง";
     const other = orientation === "landscape" ? "แนวตั้ง" : "แนวนอน";
     const status = frames[orientation === "landscape" ? "portrait" : "landscape"]
@@ -657,6 +787,7 @@ function refreshPhotoboothFramePreview() {
     if (message) message.textContent = status;
     return;
   }
+  sample.style.aspectRatio = `${frame.width} / ${frame.height}`;
   if (window.__frameOverlayPreviewFile !== frame.file) {
     if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
     window.__frameOverlayPreviewFile = frame.file;
@@ -664,11 +795,71 @@ function refreshPhotoboothFramePreview() {
   }
   overlay.src = window.__frameOverlayPreviewUrl;
   overlay.hidden = false;
+  if (overlay.complete && overlay.naturalWidth) updateFramePhotoPreviewOpening();
+  else overlay.onload = updateFramePhotoPreviewOpening;
   const message = $("#framePreviewMessage");
   if (message) message.textContent = photo?.naturalWidth && !photo.hidden
     ? `ตัวอย่างภาพ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · ระบบเลือกกรอบที่ตรงแนวให้อัตโนมัติ`
     : `ตัวอย่างกรอบ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · เลือกรูปจริงเพื่อดูการจัดวางกับภาพของคุณ`;
   updateFramePreviewTransform();
+}
+
+function updateFramePhotoPreviewOpening() {
+  const photo = $("#framePhotoPreviewImage");
+  const overlay = $("#frameOverlayPreview");
+  if (!photo?.naturalWidth || photo.hidden || !overlay?.naturalWidth) return;
+  const opening = getFrameOpening(overlay);
+  if (!opening) return;
+  const scale = Number($("#frameScale")?.value || 100) / 100;
+  const offsetX = Number($("#frameOffsetX")?.value || 0) / 100;
+  const offsetY = Number($("#frameOffsetY")?.value || 0) / 100;
+  const left = opening.x / 100, top = opening.y / 100;
+  const right = left + opening.width / 100, bottom = top + opening.height / 100;
+  photo.style.left = `${((left - .5) * scale + .5 + offsetX) * 100}%`;
+  photo.style.top = `${((top - .5) * scale + .5 + offsetY) * 100}%`;
+  photo.style.width = `${(right - left) * scale * 100}%`;
+  photo.style.height = `${(bottom - top) * scale * 100}%`;
+  photo.style.right = "auto";
+  photo.style.bottom = "auto";
+  photo.style.objectFit = "contain";
+}
+
+function getFrameOpening(image) {
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 96;
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    context.drawImage(image, 0, 0, 96, 96);
+    const pixels = context.getImageData(0, 0, 96, 96).data;
+    const alpha = (x, y) => pixels[(y * 96 + x) * 4 + 3];
+    let seed = null;
+    for (let radius = 0; radius <= 9 && !seed; radius++) {
+      for (let y = 48 - radius; y <= 48 + radius && !seed; y++) for (let x = 48 - radius; x <= 48 + radius; x++) {
+        if (x >= 0 && y >= 0 && x < 96 && y < 96 && alpha(x, y) < 40) { seed = [x, y]; break; }
+      }
+    }
+    if (!seed) return null;
+    const spans = Array.from({ length: 96 }, (_, y) => {
+      if (alpha(seed[0], y) >= 40) return null;
+      let left = seed[0], right = seed[0] + 1;
+      while (left > 0 && alpha(left - 1, y) < 40) left--;
+      while (right < 96 && alpha(right, y) < 40) right++;
+      return [left, right];
+    });
+    let bestArea = 0, best = null;
+    for (let top = seed[1]; top >= 0 && spans[top]; top--) {
+      let left = spans[top][0], right = spans[top][1];
+      for (let bottom = seed[1]; bottom < 96 && spans[bottom]; bottom++) {
+        left = Math.max(left, spans[bottom][0]); right = Math.min(right, spans[bottom][1]);
+        const area = (right - left) * (bottom - top + 1);
+        if (area > bestArea) { bestArea = area; best = [left, top, right, bottom + 1]; }
+      }
+    }
+    if (!best) return null;
+    const insetX = Math.max(1, (best[2] - best[0]) * .025), insetY = Math.max(1, (best[3] - best[1]) * .025);
+    best[0] += insetX; best[2] -= insetX; best[1] += insetY; best[3] -= insetY;
+    return { x: best[0] / 96 * 100, y: best[1] / 96 * 100, width: (best[2] - best[0]) / 96 * 100, height: (best[3] - best[1]) / 96 * 100 };
+  } catch (_) { return null; }
 }
 
 function updateFramePreviewTransform() {
@@ -679,6 +870,7 @@ function updateFramePreviewTransform() {
   $("#frameXValue").value = `${x}%`;
   $("#frameYValue").value = `${y}%`;
   $("#frameOverlayPreview").style.transform = `translate(${x}%, ${y}%) scale(${scale})`;
+  updateFramePhotoPreviewOpening();
 }
 
 async function uploadPhotoboothFrame(eventId, file, orientation) {
@@ -740,8 +932,14 @@ async function createEvent(ev) {
   const checked = (k) => f.get(k) === "on";
   let frameFiles = Object.entries(window.activePhotoboothFrames || {}).map(([orientation, meta]) => [orientation, meta.file]);
   const frameEnabled = checked("photobooth_frame_enabled");
+  const cardMakerEnabled = checked("card_maker_enabled");
+  const cardTemplateFile = $("#cardTemplateFile")?.files?.[0] || null;
+  if (cardMakerEnabled && !cardTemplateFile) {
+    alert("อัปโหลดเทมเพลต PNG ก่อนเปิดให้ลูกค้าทำการ์ดภาพ");
+    return;
+  }
   if (frameEnabled && !frameFiles.length) {
-    alert("เลือกธีมสำเร็จรูปหรืออัปโหลดกรอบ PNG อย่างน้อยหนึ่งไฟล์");
+    alert("อัปโหลดกรอบ PNG อย่างน้อยหนึ่งไฟล์ก่อนเปิดใช้กรอบอัตโนมัติ");
     return;
   }
   try {
@@ -754,9 +952,13 @@ async function createEvent(ev) {
     showToast(error.message || "ตรวจสอบกรอบไม่สำเร็จ", "error");
     return;
   }
+  if (cardTemplateFile) {
+    try { await inspectCardTemplate(cardTemplateFile); }
+    catch (error) { $("#cardTemplateStatus").textContent = error.message; showToast(error.message, "error"); return; }
+  }
   const payload = {
     name: f.get("name"), description: f.get("description"), event_date: f.get("event_date"),
-    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "Photo Booth Experience by CS.BXXM STUDIO", report_contact: f.get("report_contact") || "", photobooth_frame_scale: Number(f.get("frameScale")) / 100, photobooth_frame_x: Number(f.get("frameOffsetX")) / 100, photobooth_frame_y: Number(f.get("frameOffsetY")) / 100 }),
+    gallery: Object.assign(Object.fromEntries(["enable_gallery","allow_download"].map(k => [k, checked(k)])), { find_my_photos: false, instant_publish: true, review_before_publish: false, optional_pin: f.get("optional_pin") || "", credit_text: f.get("credit_text") || "Photo Booth Experience by CS.BXXM STUDIO", report_contact: f.get("report_contact") || "", card_maker_enabled: cardMakerEnabled, card_template_name: cardTemplateFile?.name || "", photobooth_frame_scale: Number(f.get("frameScale")) / 100, photobooth_frame_x: Number(f.get("frameOffsetX")) / 100, photobooth_frame_y: Number(f.get("frameOffsetY")) / 100 }),
     drive: { upload_finished_photos: checked("upload_finished_photos"), upload_originals: checked("upload_originals") }
   };
   const event = await api("/api/events", { method: "POST", body: JSON.stringify(payload) });
@@ -771,7 +973,17 @@ async function createEvent(ev) {
       frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
     }
   }
-  $("#created").innerHTML = `${frameStatus}<hr><h2>INCOMING Folder</h2><div class="pathbox">${html(event.incoming_path)}</div><div class="row" style="margin-top:14px"><button onclick='navigator.clipboard.writeText(${jsArg(event.incoming_path)})'>Copy Path</button><button onclick='startEvent(${jsArg(event.id)})'>Start Event</button></div>`;
+  let cardStatus = "";
+  if (cardTemplateFile) {
+    try {
+      const body = new FormData(); body.append("template", cardTemplateFile, cardTemplateFile.name); body.append("enabled", String(cardMakerEnabled));
+      const result = await api(`/api/events/${event.id}/card-template`, { method: "POST", body, headers: {} });
+      cardStatus = `<div class="frame-upload-success">${cardMakerEnabled ? "เปิดใช้การ์ดภาพแล้ว" : "บันทึกเทมเพลตแล้ว โดยยังปิดฟีเจอร์ไว้"} · ${html(result.filename)} (${result.width} × ${result.height} px) · ลูกค้าเลือกภาพได้ 4 รูป</div>`;
+    } catch (err) {
+      cardStatus = `<div class="frame-upload-error">สร้างงานแล้ว แต่อัปโหลดเทมเพลตการ์ดไม่สำเร็จ: ${html(err.message)}</div>`;
+    }
+  }
+  $("#created").innerHTML = `${frameStatus}${cardStatus}<hr><h2>INCOMING Folder</h2><div class="pathbox">${html(event.incoming_path)}</div><div class="row" style="margin-top:14px"><button onclick='navigator.clipboard.writeText(${jsArg(event.incoming_path)})'>Copy Path</button><button onclick='startEvent(${jsArg(event.id)})'>Start Event</button></div>`;
   renderEvents();
 }
 async function startEvent(id) {
@@ -982,15 +1194,40 @@ function loadGalleryPreview() {
 async function loadGuestSettings(eventId) {
   const settings = await api(`/api/events/${eventId}/gallery-settings`);
   const form = $("#guestSettingsForm");
+  if (!form.elements.card_maker_enabled) {
+    form.querySelector('[type="submit"]').insertAdjacentHTML("beforebegin", `${cardTemplateStarterResources()}<label class="check card-maker-admin-toggle"><input type="checkbox" name="card_maker_enabled">เปิดให้ลูกค้าทำการ์ดภาพ</label><label><span>เปลี่ยนเทมเพลตการ์ด PNG (ไม่บังคับ)</span><input type="file" name="card_template_file" accept="image/png,.png"></label><small class="muted">ใช้ PNG แนวตั้ง 600 × 1800 px เว้นช่องภาพ 4 ช่อง ถ้า export จาก Canva เป็นพื้นขาว ระบบจะลบพื้นและตัดช่องให้</small><small id="cardMakerAdminStatus" class="muted"></small>`);
+  }
+  if (!form.querySelector("#photoStripThemeManager")) form.querySelector('[type="submit"]').insertAdjacentHTML("beforebegin", photoStripAdminHtml());
   for (const field of ["credit_text", "report_contact"]) {
     form.elements[field].value = settings[field] || "";
   }
+  form.elements.card_maker_enabled.checked = Boolean(settings.card_maker_enabled);
+  form.dataset.cardTemplatePresent = settings.card_template_present ? "true" : "false";
+  $("#cardMakerAdminStatus").textContent = settings.card_template_present
+    ? `เทมเพลตปัจจุบัน: ${settings.card_template_name || "พร้อมใช้"} · ${settings.card_maker_enabled ? "ลูกค้าใช้ได้" : "ปิดการใช้งานอยู่"}`
+    : "ยังไม่มีเทมเพลตการ์ดสำหรับงานนี้";
+  loadPhotoStripAdminSettings(eventId).catch(error => {
+    const root = document.querySelector("#photoStripThemeManager");
+    if (root) { root.textContent = `โหลดธีม Photo Strip ไม่สำเร็จ: ${error.message}`; root.classList.add("badtext"); }
+  });
   form.onsubmit = async (ev) => {
     ev.preventDefault();
     const submit = form.querySelector('[type="submit"]');
     submit.disabled = true;
     try {
-      await api(`/api/events/${eventId}/gallery-settings`, { method: "POST", body: JSON.stringify(Object.fromEntries(new FormData(form))) });
+      const values = Object.fromEntries(new FormData(form));
+      const cardTemplate = form.elements.card_template_file.files?.[0];
+      if (form.elements.card_maker_enabled.checked && form.dataset.cardTemplatePresent !== "true" && !cardTemplate) throw new Error("อัปโหลดเทมเพลต PNG ก่อนเปิดให้ลูกค้าทำการ์ดภาพ");
+      if (cardTemplate) await inspectCardTemplate(cardTemplate);
+      values.card_maker_enabled = form.elements.card_maker_enabled.checked;
+      delete values.card_template_file;
+      if (cardTemplate) {
+        const body = new FormData(); body.append("template", cardTemplate, cardTemplate.name); body.append("enabled", String(values.card_maker_enabled));
+        await api(`/api/events/${eventId}/card-template`, { method: "POST", body, headers: {} });
+        form.dataset.cardTemplatePresent = "true";
+      }
+      await api(`/api/events/${eventId}/gallery-settings`, { method: "POST", body: JSON.stringify(values) });
+      $("#cardMakerAdminStatus").textContent = cardTemplate ? `อัปโหลดเทมเพลต ${cardTemplate.name} แล้ว` : (values.card_maker_enabled ? "เปิดให้ลูกค้าใช้การ์ดภาพแล้ว" : "ปิดการใช้งานการ์ดภาพแล้ว");
       alert("บันทึกข้อมูลแกลเลอรีแล้ว");
     } catch (err) {
       alert(`บันทึกไม่สำเร็จ\n\n${err.message}`);

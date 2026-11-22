@@ -13,7 +13,7 @@ from sqlalchemy import and_, select
 from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
-from ..sync.cloud import enabled as cloud_sync_enabled, list_cloud_events, sync_event, sync_photo
+from ..sync.cloud import delete_photo_strip_asset, enabled as cloud_sync_enabled, list_cloud_events, sync_card_template, sync_event, sync_photo, sync_photo_strip_asset
 from ..uploader.storage import GoogleAuthorizationExpired, env_provider
 
 log = logging.getLogger("photoflow")
@@ -156,6 +156,20 @@ class JobWorker:
                     self._publish_photo(db, job)
                 elif job.type == "SYNC_EVENT":
                     self._sync_event(db, job)
+                elif job.type == "SYNC_CARD_TEMPLATE":
+                    event = db.get(Event, job.event_id)
+                    if not event or not sync_card_template(event, strict=True):
+                        raise RuntimeError("Could not sync card template")
+                elif job.type == "SYNC_PHOTO_STRIP_ASSET":
+                    event = db.get(Event, job.event_id)
+                    payload = json.loads(job.payload_json or "{}")
+                    if not event or not sync_photo_strip_asset(event, str(payload.get("theme_id") or ""), int(payload.get("photo_count") or 0), strict=True):
+                        raise RuntimeError("Could not sync Photo Strip layout")
+                elif job.type == "DELETE_PHOTO_STRIP_ASSET":
+                    event = db.get(Event, job.event_id)
+                    payload = json.loads(job.payload_json or "{}")
+                    if event and not delete_photo_strip_asset(event, str(payload.get("theme_id") or ""), int(payload.get("photo_count") or 0), strict=True):
+                        raise RuntimeError("Could not delete Photo Strip layout from cloud")
                 elif job.type == "SYNC_PHOTO":
                     self._sync_photo(db, job)
                 job.state = "PROCESSED"
