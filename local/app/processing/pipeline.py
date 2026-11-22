@@ -116,8 +116,8 @@ def _frame_aperture(frame: Image.Image) -> tuple[int, int, int, int] | None:
     return box if box[2] - box[0] >= frame.width * .3 and box[3] - box[1] >= frame.height * .3 else None
 
 
-def _group_photo_scale(img: Image.Image) -> float:
-    """Add a small visual margin for group shots when local face detection works."""
+def _detect_photo_faces(img: Image.Image) -> list[tuple[int, int, int, int]]:
+    """Detect faces locally; coordinates are returned in the source photo."""
     try:
         import cv2
         import numpy as np
@@ -128,14 +128,43 @@ def _group_photo_scale(img: Image.Image) -> float:
             rgb = cv2.resize(rgb, (max(1, round(img.width * scale)), max(1, round(img.height * scale))))
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
-        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(20, 20))
-        # Preserve the full scene in every case. Larger groups get a little more
-        # breathing room from frame ornaments around the opening.
-        return max(.88, 1 - max(0, len(faces) - 2) * .018)
+        faces = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(20, 20))
+        return [tuple(round(value / scale) for value in face) for face in faces]
     except Exception:
-        # Frame placement itself is safe without face detection; this is only an
-        # optional refinement for group photos.
-        return 1.0
+        return []
+
+
+def _face_safe_crop(img: Image.Image, target_aspect: float, faces: list[tuple[int, int, int, int]]) -> Image.Image | None:
+    """Fill a frame opening while keeping detected heads and breathing room visible."""
+    if not faces or target_aspect <= 0:
+        return None
+    width, height = img.size
+    source_aspect = width / height
+    if abs(source_aspect - target_aspect) < .015:
+        return img.copy()
+    face_left = min(x for x, _, _, _ in faces)
+    face_top = min(y for _, y, _, _ in faces)
+    face_right = max(x + w for x, _, w, _ in faces)
+    face_bottom = max(y + h for _, y, _, h in faces)
+    face_size = max(1, round(sum(min(w, h) for _, _, w, h in faces) / len(faces)))
+    if source_aspect > target_aspect:
+        crop_width = max(1, round(height * target_aspect))
+        margin = round(face_size * .45)
+        low = max(0, face_right + margin - crop_width)
+        high = min(width - crop_width, face_left - margin)
+        if low > high:
+            return None
+        left = round(min(high, max(low, (width - crop_width) / 2)))
+        return img.crop((left, 0, left + crop_width, height))
+    crop_height = max(1, round(width / target_aspect))
+    top_margin = round(face_size * .55)
+    bottom_margin = round(face_size * 1.6)
+    low = max(0, face_bottom + bottom_margin - crop_height)
+    high = min(height - crop_height, face_top - top_margin)
+    if low > high:
+        return None
+    top = round(min(high, max(low, (height - crop_height) / 2)))
+    return img.crop((0, top, width, top + crop_height))
 
 
 def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
@@ -200,9 +229,9 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
         visible = frame.crop((left - x, top - y, right - x, bottom - y))
         canvas.alpha_composite(visible, (left, top))
     frame = canvas
-    # Fill any aspect-ratio gap inside the aperture with a soft crop of the same
-    # photo, then place the entire uncropped photo on top using contain. No edge
-    # of the original shot or person is discarded by the automatic fit.
+    # Use a blurred, full-canvas version of the shot behind the frame. The sharp
+    # photo fills the opening when a crop keeps all detected faces; groups that
+    # cannot fit safely fall back to the complete uncropped photo.
     aperture = (max(0, aperture[0]), max(0, aperture[1]), min(output_width, aperture[2]), min(output_height, aperture[3]))
     if aperture[2] <= aperture[0] or aperture[3] <= aperture[1]:
         return img
@@ -213,10 +242,12 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
     if backdrop.size != (output_width, output_height):
         backdrop = backdrop.resize((output_width, output_height), Image.Resampling.BILINEAR)
     result = backdrop.convert("RGBA")
-    fit = ImageOps.contain(img.convert("RGB"), (aw, ah), method=Image.Resampling.LANCZOS)
-    group_scale = _group_photo_scale(img)
-    if group_scale < 1:
-        fit = fit.resize((max(1, round(fit.width * group_scale)), max(1, round(fit.height * group_scale))), Image.Resampling.LANCZOS)
+    source_photo = img.convert("RGB")
+    safe_crop = _face_safe_crop(source_photo, aw / ah, _detect_photo_faces(source_photo))
+    # When a face-safe crop can include every detected face, fill the opening
+    # edge to edge. If a wide group cannot fit safely, show the whole photo with
+    # the blurred fill behind it rather than cutting anyone out.
+    fit = ImageOps.fit(safe_crop, (aw, ah), method=Image.Resampling.LANCZOS) if safe_crop else ImageOps.contain(source_photo, (aw, ah), method=Image.Resampling.LANCZOS)
     result.alpha_composite(fit.convert("RGBA"), (aperture[0] + (aw - fit.width) // 2, aperture[1] + (ah - fit.height) // 2))
     result.alpha_composite(frame)
     return result.convert("RGB")

@@ -80,7 +80,7 @@ async function logoutAdmin(ev) {
 }
 
 function layout(active, content) {
-  document.body.innerHTML = `<div class="shell">${nav(active)}<main class="main">${content}</main></div>`;
+  document.body.innerHTML = `<div class="shell">${nav(active)}<main class="main ${active === "gallery" ? "main-gallery" : ""}">${content}</main></div>`;
 }
 
 async function loadDashboard() {
@@ -575,7 +575,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG ที่มีพื้นหลังโปร่งใสตรงกลาง เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG ที่เจาะช่องโปร่งใสตรงกลาง</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG ที่มีพื้นหลังโปร่งใสตรงกลาง เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG ที่เจาะช่องโปร่งใสตรงกลาง</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoBackdrop" alt="" aria-hidden="true" hidden><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -736,16 +736,21 @@ async function previewPhotoboothFrame(ev) {
 function previewFramePhoto(ev) {
   const file = ev.currentTarget.files?.[0];
   const preview = $("#framePhotoPreviewImage");
+  const backdrop = $("#framePhotoBackdrop");
   if (window.__framePhotoPreviewUrl) URL.revokeObjectURL(window.__framePhotoPreviewUrl);
   window.__framePhotoPreviewUrl = null;
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
     preview.style.cssText = "";
+    backdrop.hidden = true;
+    backdrop.removeAttribute("src");
     refreshPhotoboothFramePreview();
     return;
   }
   window.__framePhotoPreviewUrl = URL.createObjectURL(file);
+  backdrop.src = window.__framePhotoPreviewUrl;
+  backdrop.hidden = false;
   preview.onload = () => {
     const frames = window.activePhotoboothFrames || {};
     const orientation = preview.naturalWidth >= preview.naturalHeight ? "landscape" : "portrait";
@@ -774,6 +779,7 @@ function refreshPhotoboothFramePreview() {
   if (!frame) {
     overlay.hidden = true;
     overlay.removeAttribute("src");
+    $("#framePhotoBackdrop").hidden = true;
     if (photo) {
       photo.style.cssText = "";
       if (photo.naturalWidth && !photo.hidden) sample.style.aspectRatio = `${photo.naturalWidth} / ${photo.naturalHeight}`;
@@ -806,8 +812,11 @@ function refreshPhotoboothFramePreview() {
 
 function updateFramePhotoPreviewOpening() {
   const photo = $("#framePhotoPreviewImage");
+  const backdrop = $("#framePhotoBackdrop");
   const overlay = $("#frameOverlayPreview");
   if (!photo?.naturalWidth || photo.hidden || !overlay?.naturalWidth) return;
+  if (backdrop.src !== photo.src) backdrop.src = photo.src;
+  backdrop.hidden = false;
   const opening = getFrameOpening(overlay);
   if (!opening) return;
   const scale = Number($("#frameScale")?.value || 100) / 100;
@@ -821,7 +830,7 @@ function updateFramePhotoPreviewOpening() {
   photo.style.height = `${(bottom - top) * scale * 100}%`;
   photo.style.right = "auto";
   photo.style.bottom = "auto";
-  photo.style.objectFit = "contain";
+  photo.style.objectFit = "cover";
 }
 
 function getFrameOpening(image) {
@@ -1176,7 +1185,7 @@ async function disconnectGoogle() {
 }
 
 function loadGalleryPreview() {
-  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>จัดการแกลเลอรี</h1><p class="hero-note">รูปใหม่จะแสดงอัตโนมัติเมื่อพร้อม คุณสามารถซ่อน กู้คืน หรือประมวลผลรูปใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">เปิดแกลเลอรีผู้ชม</a><button class="secondary" onclick="loadGalleryPreview()">รีเฟรช</button></div></div><section class="panel"><div class="preview-head"><div><h2>ข้อมูลที่ผู้เข้าชมเห็น</h2><p class="muted">ตั้งชื่อที่แสดงและช่องทางติดต่อของคุณบนหน้าแกลเลอรี</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" placeholder="Photo Booth Experience by CS.BXXM STUDIO"></label><label><span>ช่องทางติดต่อของคุณ</span><input name="report_contact" placeholder="Instagram, LINE, อีเมล หรือเว็บไซต์"></label><button type="submit">บันทึกข้อมูล</button></form></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>สถานะรูปภาพ</h2><p class="muted">รูปใหม่จะแสดงในแกลเลอรีอัตโนมัติเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
+  layout("gallery", `<div class="top hero-panel"><div><p class="kicker">Gallery Monitor</p><h1>จัดการแกลเลอรี</h1><p class="hero-note">รูปใหม่จะแสดงอัตโนมัติเมื่อพร้อม คุณสามารถซ่อน กู้คืน หรือประมวลผลรูปใหม่ได้จากหน้านี้</p></div><div class="row hero-actions-admin"><a id="openGuest" class="button secondary" href="#">เปิดแกลเลอรีผู้ชม</a><button class="secondary" onclick="loadGalleryPreview()">รีเฟรช</button></div></div><section class="panel"><div class="preview-head"><div><h2>ข้อมูลที่ผู้เข้าชมเห็น</h2><p class="muted">ตั้งชื่อที่แสดงและช่องทางติดต่อของคุณบนหน้าแกลเลอรี</p></div></div><form id="guestSettingsForm" class="inline-form"><label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" placeholder="Photo Booth Experience by CS.BXXM STUDIO"></label><label><span>ช่องทางติดต่อของคุณ</span><input name="report_contact" placeholder="Instagram, LINE, อีเมล หรือเว็บไซต์"></label><button type="submit">บันทึกข้อมูล</button></form><div id="galleryFeatureSettings" class="gallery-feature-settings"></div></section><section class="panel" style="margin-top:16px"><div class="preview-head"><div><h2>สถานะรูปภาพ</h2><p class="muted">รูปใหม่จะแสดงในแกลเลอรีอัตโนมัติเมื่อพร้อม</p></div><div class="row"><button id="publishAllBtn" class="secondary" type="button">กู้คืนรูปที่ค้าง</button></div></div><div id="gallerySummary" class="review-summary"></div><div id="gallery" class="review-grid"></div></section>`);
   api("/api/dashboard").then(d => {
     if (!d.active_event) {
       $("#publishAllBtn").disabled = true;
@@ -1194,10 +1203,11 @@ function loadGalleryPreview() {
 async function loadGuestSettings(eventId) {
   const settings = await api(`/api/events/${eventId}/gallery-settings`);
   const form = $("#guestSettingsForm");
+  const features = $("#galleryFeatureSettings");
   if (!form.elements.card_maker_enabled) {
-    form.querySelector('[type="submit"]').insertAdjacentHTML("beforebegin", `${cardTemplateStarterResources()}<label class="check card-maker-admin-toggle"><input type="checkbox" name="card_maker_enabled">เปิดให้ลูกค้าทำการ์ดภาพ</label><label><span>เปลี่ยนเทมเพลตการ์ด PNG (ไม่บังคับ)</span><input type="file" name="card_template_file" accept="image/png,.png"></label><small class="muted">ใช้ PNG แนวตั้ง 600 × 1800 px เว้นช่องภาพ 4 ช่อง ถ้า export จาก Canva เป็นพื้นขาว ระบบจะลบพื้นและตัดช่องให้</small><small id="cardMakerAdminStatus" class="muted"></small>`);
+    features.insertAdjacentHTML("beforeend", `${cardTemplateStarterResources()}<label class="check card-maker-admin-toggle"><input form="guestSettingsForm" type="checkbox" name="card_maker_enabled">เปิดให้ลูกค้าทำการ์ดภาพ</label><label><span>เปลี่ยนเทมเพลตการ์ด PNG (ไม่บังคับ)</span><input form="guestSettingsForm" type="file" name="card_template_file" accept="image/png,.png"></label><small class="muted">ใช้ PNG แนวตั้ง 600 × 1800 px เว้นช่องภาพ 4 ช่อง ถ้า export จาก Canva เป็นพื้นขาว ระบบจะลบพื้นและตัดช่องให้</small><small id="cardMakerAdminStatus" class="muted"></small>`);
   }
-  if (!form.querySelector("#photoStripThemeManager")) form.querySelector('[type="submit"]').insertAdjacentHTML("beforebegin", photoStripAdminHtml());
+  if (!features.querySelector("#photoStripThemeManager")) features.insertAdjacentHTML("beforeend", photoStripAdminHtml());
   for (const field of ["credit_text", "report_contact"]) {
     form.elements[field].value = settings[field] || "";
   }

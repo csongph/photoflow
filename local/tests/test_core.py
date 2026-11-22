@@ -6,8 +6,7 @@ from PIL import Image
 from PIL import ImageStat
 
 from local.app.processing.corrections import apply_natural_corrections
-from local.app.processing.pipeline import fit_long_edge, open_source_image, save_jpeg_atomic
-from local.app.processing.pipeline import apply_photobooth_frame
+from local.app.processing.pipeline import _face_safe_crop, apply_photobooth_frame, fit_long_edge, open_source_image, save_jpeg_atomic
 from local.app.models import Event
 from local.app.security import make_session, valid_session
 from local.app.utils.files import atomic_copy, safe_slug, sha256_file, unique_path, wait_until_stable
@@ -178,3 +177,25 @@ def test_photobooth_frame_fits_entire_photo_inside_opening(tmp_path: Path):
     assert result.size == (300, 600)
     assert result.getpixel((150, 165))[2] > result.getpixel((150, 165))[0]
     assert result.getpixel((150, 430))[1] > result.getpixel((150, 430))[0]
+
+
+def test_face_safe_crop_fills_opening_without_cutting_detected_group():
+    image = Image.new("RGB", (1200, 800), "white")
+    faces = [(360, 170, 70, 70), (470, 180, 66, 66)]
+    image.paste((255, 0, 0), (360, 170, 430, 240))
+    image.paste((0, 0, 255), (470, 180, 536, 246))
+
+    crop = _face_safe_crop(image, target_aspect=1.2, faces=faces)
+
+    assert crop is not None
+    assert abs(crop.width / crop.height - 1.2) < .01
+    visible_colors = set(crop.getcolors(crop.width * crop.height))
+    assert (255, 0, 0) in {color for _, color in visible_colors}
+    assert (0, 0, 255) in {color for _, color in visible_colors}
+
+
+def test_face_safe_crop_preserves_wide_group_when_crop_cannot_fit_faces():
+    image = Image.new("RGB", (1200, 800), "white")
+    faces = [(100, 180, 80, 80), (1000, 180, 80, 80)]
+
+    assert _face_safe_crop(image, target_aspect=.7, faces=faces) is None
