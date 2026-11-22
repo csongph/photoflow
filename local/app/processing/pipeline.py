@@ -176,7 +176,8 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
         # aperture that can be safely detected.
         return img
     try:
-        scale = min(1.35, max(0.7, float(gallery.get("photobooth_frame_scale", 1))))
+        configured_scale = float(gallery.get("photobooth_frame_scale", 1))
+        scale = min(1.35, max(0.7, configured_scale)) if 0.7 <= configured_scale <= 1.35 else 1.0
         offset_x = min(0.15, max(-0.15, float(gallery.get("photobooth_frame_x", 0))))
         offset_y = min(0.15, max(-0.15, float(gallery.get("photobooth_frame_y", 0))))
     except (TypeError, ValueError):
