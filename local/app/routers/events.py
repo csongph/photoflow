@@ -473,9 +473,15 @@ async def upload_photobooth_frame(
 
     frame_path = Path(event.root_path) / "CACHE" / f"photobooth-frame-{orientation}.png"
     frame_path.parent.mkdir(parents=True, exist_ok=True)
-    temp_path = frame_path.with_suffix(".tmp.png")
-    rgba.save(temp_path, format="PNG", optimize=True)
-    temp_path.replace(frame_path)
+    # Two orientations can be uploaded during the same submit. Give each
+    # request a private temp file so parallel requests cannot overwrite or
+    # replace one another's staged PNG.
+    temp_path = frame_path.with_name(f".{frame_path.stem}-{secrets.token_hex(8)}.tmp.png")
+    try:
+        rgba.save(temp_path, format="PNG", optimize=True)
+        temp_path.replace(frame_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
     gallery = gallery_settings(event)
     gallery["photobooth_frame_enabled"] = True
     gallery["photobooth_frame_auto_orientation"] = True

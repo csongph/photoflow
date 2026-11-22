@@ -827,7 +827,8 @@ async function retryPhotoboothFrame(eventId) {
   const status = $("#frameUploadResult");
   status.textContent = "กำลังอัปโหลดกรอบ...";
   try {
-    const results = await Promise.all(files.map(([orientation, selected]) => uploadPhotoboothFrame(eventId, selected, orientation)));
+    const results = [];
+    for (const [orientation, selected] of files) results.push(await uploadPhotoboothFrame(eventId, selected, orientation));
     const reprocessed = await api(`/api/events/${eventId}/photos/reprocess`, { method: "POST" });
     const orientationNote = results.length === 1 ? " · รูปอีกแนวจะแสดงโดยไม่ใส่กรอบเพื่อรักษาสัดส่วน" : "";
     status.innerHTML = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเก่า ${reprocessed.queued} รูปกลับไปประมวลผลแล้ว${orientationNote}</div>`;
@@ -907,7 +908,8 @@ async function createEvent(ev) {
   let frameStatus = "";
   if (frameEnabled) {
     try {
-      const results = await Promise.all(frameFiles.map(([orientation, file]) => uploadPhotoboothFrame(event.id, file, orientation)));
+      const results = [];
+      for (const [orientation, file] of frameFiles) results.push(await uploadPhotoboothFrame(event.id, file, orientation));
       const reprocessed = await api(`/api/events/${event.id}/photos/reprocess`, { method: "POST" });
       const orientationNote = results.length === 1 ? " · รูปอีกแนวจะแสดงโดยไม่ใส่กรอบเพื่อรักษาสัดส่วน" : "";
       frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว${orientationNote}</div>`;
