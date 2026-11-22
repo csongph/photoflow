@@ -9,7 +9,8 @@ import re
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from PIL import Image
 from io import BytesIO
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -84,6 +85,22 @@ def require_sync_token(authorization: str = Header("")) -> None:
         raise HTTPException(401, "Invalid sync token")
 
 
+def _upsert_sync_row(db: Session, model, values: dict, conflict_columns: list) -> None:
+    """Atomically insert/update sync rows across worker requests."""
+    dialect = db.get_bind().dialect.name
+    insert_fn = pg_insert if dialect == "postgresql" else sqlite_insert if dialect == "sqlite" else None
+    if insert_fn is None:
+        raise RuntimeError(f"Unsupported sync database dialect: {dialect}")
+    statement = insert_fn(model).values(**values)
+    conflict_names = {column.key for column in conflict_columns}
+    updates = {
+        key: getattr(statement.excluded, key)
+        for key in values
+        if key not in conflict_names
+    }
+    db.execute(statement.on_conflict_do_update(index_elements=conflict_columns, set_=updates))
+
+
 @router.post("/event")
 def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
     public_id = public_id_from(payload)
@@ -99,24 +116,6 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     incoming_pin_hash = str(incoming_settings.get("pin_hash") or "").strip()
     if incoming_pin_hash and (len(incoming_pin_hash) != 64 or any(ch not in "0123456789abcdef" for ch in incoming_pin_hash.lower())):
         raise HTTPException(422, "Invalid gallery PIN hash")
-    # SYNC_PHOTO jobs can run on several local workers at once. Two requests
-    # may both observe a missing event (or settings row), so recover from the
-    # winner's unique-key insert instead of returning a 500 to photo jobs.
-    event = db.query(Event).filter(Event.public_id == public_id).first()
-    if event is None:
-        event = Event(public_id=public_id)
-        db.add(event)
-        try:
-            db.flush()
-        except IntegrityError:
-            db.rollback()
-            event = db.query(Event).filter(Event.public_id == public_id).first()
-            if event is None:
-                raise
-    event.name = name
-    event.event_date = event_date
-    event.description = description
-    event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
     allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact", "card_maker_enabled", "card_template_name", "photo_strip_enabled", "photo_strip_config_json"}
     gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
     enabled = incoming_settings.get("enable_gallery", True)
@@ -149,37 +148,31 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
         value = incoming_settings.get(key, "")
         if not isinstance(value, str) or len(value) > limit:
             raise HTTPException(422, f"Invalid gallery setting: {key}")
-    current_settings = db.get(GallerySettings, event.id)
-    if current_settings is None:
-        current_settings = GallerySettings(event_id=event.id)
-    for key, value in gallery_settings.items():
-        setattr(current_settings, key, value)
-    current_settings.photo_strip_enabled = bool(incoming_settings.get("photo_strip_enabled", current_settings.photo_strip_enabled))
-    current_settings.photo_strip_config_json = strip_config_json
-    db.add(current_settings)
+    event_values = {
+        "public_id": public_id,
+        "name": name,
+        "event_date": event_date,
+        "description": description,
+        "pin_hash": incoming_pin_hash if incoming_pin_hash else "",
+    }
+    _upsert_sync_row(db, Event, event_values, [Event.public_id])
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if event is None:
+        raise RuntimeError("Cloud event upsert completed without a readable event")
+
+    settings_values = {"event_id": event.id, **gallery_settings}
+    if "photo_strip_enabled" in incoming_settings:
+        settings_values["photo_strip_enabled"] = incoming_settings["photo_strip_enabled"]
+    if "photo_strip_config_json" in incoming_settings:
+        settings_values["photo_strip_config_json"] = strip_config_json
+    elif "photo_strip_enabled" in incoming_settings:
+        settings_values["photo_strip_config_json"] = "{}"
+    _upsert_sync_row(db, GallerySettings, settings_values, [GallerySettings.event_id])
     try:
         db.commit()
-    except IntegrityError:
-        # A parallel sync may have inserted this event's GallerySettings row.
-        # Retry as an update after the competing transaction commits.
+    except Exception:
         db.rollback()
-        event = db.query(Event).filter(Event.public_id == public_id).first()
-        if event is None:
-            raise
-        event.name = name
-        event.event_date = event_date
-        event.description = description
-        event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
-        current_settings = db.get(GallerySettings, event.id)
-        if current_settings is None:
-            raise
-        for key, value in gallery_settings.items():
-            setattr(current_settings, key, value)
-        current_settings.photo_strip_enabled = bool(incoming_settings.get("photo_strip_enabled", current_settings.photo_strip_enabled))
-        current_settings.photo_strip_config_json = strip_config_json
-        db.add(event)
-        db.add(current_settings)
-        db.commit()
+        raise
     return {"event_id": event.id, "public_id": event.public_id}
 
 
