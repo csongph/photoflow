@@ -106,6 +106,18 @@ def post(path: str, payload: dict[str, Any], *, strict: bool = False) -> bool:
             response = client.post(f"{base}{path}", json=payload, headers=sync_headers())
             response.raise_for_status()
             return True
+        except httpx.HTTPStatusError as exc:
+            body = (exc.response.text or "").strip().replace("\r", " ").replace("\n", " ")[:800]
+            log.warning(
+                "Cloud sync failed for %s (status=%s, response=%s): %s",
+                path,
+                exc.response.status_code,
+                body or "<empty>",
+                exc,
+            )
+            if strict:
+                raise CloudSyncError(f"Cloud sync failed for {path} (HTTP {exc.response.status_code}): {body or exc}") from exc
+            return False
         except Exception as exc:
             log.warning("Cloud sync failed for %s: %s", path, exc)
             if strict:
