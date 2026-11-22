@@ -286,6 +286,21 @@ def list_cloud_events(offset: int = 0, limit: int = 100, db: Session = Depends(g
     return result
 
 
+@router.get("/events/index")
+def list_cloud_event_index(db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
+    """Return compact event/photo IDs for local sync reconciliation."""
+    rows = db.query(Event.public_id, Photo.local_photo_id).outerjoin(
+        Photo,
+        (Photo.event_id == Event.id) & (Photo.published.is_(True)),
+    ).order_by(Event.public_id.asc(), Photo.local_photo_id.asc()).all()
+    index: dict[str, list[str]] = {}
+    for public_id, local_photo_id in rows:
+        index.setdefault(public_id, [])
+        if local_photo_id:
+            index[public_id].append(local_photo_id)
+    return [{"public_id": public_id, "photo_ids": photo_ids} for public_id, photo_ids in index.items()]
+
+
 @router.get("/events/{public_id}/photos")
 def list_cloud_event_photos(public_id: str, offset: int = 0, limit: int = 200, db: Session = Depends(get_db), _: None = Depends(require_sync_token)):
     event = db.query(Event).filter(Event.public_id == public_id).first()

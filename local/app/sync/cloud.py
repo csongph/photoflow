@@ -235,6 +235,43 @@ def delete_cloud_event(public_id: str, *, strict: bool = False) -> bool:
     return delete(f"/api/sync/event/{public_id}", strict=strict)
 
 
+def list_cloud_event_index(*, strict: bool = False) -> list[dict[str, Any]]:
+    """Fetch only event IDs and published photo IDs for lightweight repair checks."""
+    base = cloud_api_url()
+    if not base:
+        if strict:
+            raise CloudSyncError("Cloud API is not configured")
+        return []
+    try:
+        with httpx.Client(timeout=20) as client:
+            response = client.get(f"{base}/api/sync/events/index", headers=sync_headers())
+            if response.status_code == 404:
+                # Older Cloud deployments do not have the compact index yet.
+                legacy = list_cloud_events(strict=strict)
+                return [
+                    {
+                        "public_id": event.get("public_id"),
+                        "photo_ids": [
+                            photo.get("local_photo_id")
+                            for photo in event.get("photos", [])
+                            if isinstance(photo, dict) and photo.get("published") is True
+                        ],
+                    }
+                    for event in legacy
+                    if isinstance(event, dict)
+                ]
+            response.raise_for_status()
+            rows = response.json()
+            if not isinstance(rows, list) or any(not isinstance(row, dict) for row in rows):
+                raise ValueError("Cloud returned an invalid event index")
+            return rows
+    except Exception as exc:
+        log.warning("Could not load cloud event index: %s", exc)
+        if strict:
+            raise CloudSyncError(f"Cloud event index failed: {exc}") from exc
+        return []
+
+
 def list_cloud_events(*, strict: bool = False) -> list[dict[str, Any]]:
     base = cloud_api_url()
     if not base:

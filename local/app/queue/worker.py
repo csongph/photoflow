@@ -13,7 +13,7 @@ from sqlalchemy import and_, select
 from ..database import SessionLocal
 from ..models import Event, Job, Photo, Setting, Upload
 from ..processing.pipeline import UnsupportedRawError, process_photo
-from ..sync.cloud import delete_photo_strip_asset, enabled as cloud_sync_enabled, list_cloud_events, sync_card_template, sync_event, sync_photo, sync_photo_strip_asset
+from ..sync.cloud import delete_photo_strip_asset, enabled as cloud_sync_enabled, list_cloud_event_index, list_cloud_events, sync_card_template, sync_event, sync_photo, sync_photo_strip_asset
 from ..uploader.storage import GoogleAuthorizationExpired, env_provider
 
 log = logging.getLogger("photoflow")
@@ -97,17 +97,107 @@ class JobWorker:
         except ValueError:
             interval = 60
             log.warning("Invalid CLOUD_EVENT_POLL_SECONDS; using 60 seconds")
+        try:
+            import_interval = min(86400, max(60, int(os.getenv("CLOUD_EVENT_IMPORT_POLL_SECONDS", "300"))))
+        except ValueError:
+            import_interval = 300
+            log.warning("Invalid CLOUD_EVENT_IMPORT_POLL_SECONDS; using 300 seconds")
         while not self.stop_event.is_set():
             if cloud_sync_enabled():
                 try:
-                    from ..routers.events import import_cloud_events
+                    cloud_index = list_cloud_event_index(strict=True)
                     with SessionLocal() as db:
-                        result = import_cloud_events(db, list_cloud_events(strict=True))
-                    if result["created"] or result["updated"]:
-                        log.info("Cloud event poll: imported %s new event(s), updated %s", result["created"], result["updated"])
+                        repairs = self._enqueue_cloud_repairs(db, cloud_index)
+                    if repairs["events"] or repairs["photos"]:
+                        log.warning(
+                            "Cloud sync repair queued: %s missing event(s), %s missing photo(s)",
+                            repairs["events"],
+                            repairs["photos"],
+                        )
                 except Exception:
-                    log.exception("Cloud event poll failed; will retry")
+                    log.exception("Cloud sync reconciliation failed; will retry")
+                if time.monotonic() - self._last_cloud_poll >= import_interval:
+                    try:
+                        from ..routers.events import import_cloud_events
+                        cloud_events = list_cloud_events(strict=True)
+                        with SessionLocal() as db:
+                            result = import_cloud_events(db, cloud_events)
+                        self._last_cloud_poll = time.monotonic()
+                        if result["created"] or result["updated"]:
+                            log.info("Cloud event import: imported %s new event(s), updated %s", result["created"], result["updated"])
+                    except Exception:
+                        log.exception("Cloud event import failed; will retry")
             self.stop_event.wait(interval)
+
+    def _enqueue_cloud_repairs(self, db, cloud_events: list[dict]) -> dict[str, int]:
+        """Queue local published data that is missing from Cloud for automatic recovery."""
+        remote_photos: dict[str, set[str]] = {}
+        remote_ids: set[str] = set()
+        for remote in cloud_events:
+            public_id = str(remote.get("public_id") or "").strip()
+            if not public_id:
+                continue
+            remote_ids.add(public_id)
+            if isinstance(remote.get("photo_ids"), list):
+                remote_photos[public_id] = {str(photo_id).strip() for photo_id in remote["photo_ids"] if photo_id}
+            else:
+                photos = remote.get("photos") if isinstance(remote.get("photos"), list) else []
+                remote_photos[public_id] = {
+                    str(photo.get("local_photo_id") or "").strip()
+                    for photo in photos
+                    if isinstance(photo, dict) and photo.get("published") is True and photo.get("local_photo_id")
+                }
+
+        queued_events = queued_photos = 0
+        local_events = db.query(Event).all()
+        active_states = ("QUEUED", "RETRYING", "PROCESSING")
+        for event in local_events:
+            try:
+                settings = json.loads(event.gallery_json or "{}")
+            except (TypeError, json.JSONDecodeError):
+                settings = {}
+            if not isinstance(settings, dict):
+                settings = {}
+            if settings.get("cloud_mirror") or event.status == "CLOUD":
+                continue
+
+            event_missing = event.public_id not in remote_ids
+            if event_missing:
+                pending_event = db.query(Job.id).filter(
+                    Job.event_id == event.id,
+                    Job.type == "SYNC_EVENT",
+                    Job.state.in_(active_states),
+                ).first()
+                if not pending_event:
+                    db.add(Job(
+                        event_id=event.id,
+                        type="SYNC_EVENT",
+                        priority=25,
+                        payload_json=json.dumps({"repair_gallery": True}),
+                    ))
+                    queued_events += 1
+
+            present_photo_ids = remote_photos.get(event.public_id, set())
+            for photo in db.query(Photo).filter(Photo.event_id == event.id, Photo.published.is_(True)).all():
+                # The repair SYNC_EVENT job enqueues this event's photos only
+                # after its metadata has reached Cloud, avoiding a 409 race.
+                if event_missing:
+                    continue
+                if photo.id in present_photo_ids:
+                    continue
+                pending_photo = db.query(Job.id).filter(
+                    Job.event_id == event.id,
+                    Job.photo_id == photo.id,
+                    Job.type == "SYNC_PHOTO",
+                    Job.state.in_(active_states),
+                ).first()
+                if not pending_photo:
+                    db.add(Job(event_id=event.id, photo_id=photo.id, type="SYNC_PHOTO", priority=35))
+                    queued_photos += 1
+
+        if queued_events or queued_photos:
+            db.commit()
+        return {"events": queued_events, "photos": queued_photos}
 
     def _run(self) -> None:
         while not self.stop_event.is_set():
@@ -317,6 +407,20 @@ class JobWorker:
         event = db.get(Event, job.event_id)
         if event:
             sync_event(event, strict=cloud_sync_enabled())
+            try:
+                repair_gallery = json.loads(job.payload_json or "{}").get("repair_gallery") is True
+            except (TypeError, json.JSONDecodeError):
+                repair_gallery = False
+            if repair_gallery:
+                for photo in db.query(Photo).filter(Photo.event_id == event.id, Photo.published.is_(True)).all():
+                    pending = db.query(Job.id).filter(
+                        Job.event_id == event.id,
+                        Job.photo_id == photo.id,
+                        Job.type == "SYNC_PHOTO",
+                        Job.state.in_(("QUEUED", "RETRYING", "PROCESSING")),
+                    ).first()
+                    if not pending:
+                        db.add(Job(event_id=event.id, photo_id=photo.id, type="SYNC_PHOTO", priority=35))
 
     def _sync_photo(self, db, job: Job) -> None:
         event = db.get(Event, job.event_id)
