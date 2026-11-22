@@ -576,7 +576,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG ที่มีพื้นหลังโปร่งใสตรงกลาง เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะเลือกกรอบให้ตรงกับรูปโดยอัตโนมัติ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG ที่เจาะช่องโปร่งใสตรงกลาง</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" name="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" name="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" name="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoBackdrop" alt="" aria-hidden="true" hidden><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG แบบ Overlay ที่มีพื้นหลังโปร่งใส เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะปรับกรอบให้พอดีกับรูปโดยคงรูปถ่ายไว้เต็มใบ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG แบบพื้นหลังโปร่งใส</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" name="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" name="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" name="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -696,7 +696,7 @@ async function previewPhotoboothFrame(ev) {
     window.frameSelectionLoading = false;
     $("[name=photobooth_frame_enabled]").checked = false;
     $("#frameOverlayPreview").hidden = true;
-    setFrameAutoStatus("กรอบต้องมีช่องโปร่งใสตรงกลาง เพื่อให้เห็นภาพถ่ายด้านใน");
+    setFrameAutoStatus("เลือกกรอบ PNG ที่มีพื้นหลังโปร่งใส");
     refreshPhotoboothFramePreview();
     return;
   }
@@ -737,21 +737,16 @@ async function previewPhotoboothFrame(ev) {
 function previewFramePhoto(ev) {
   const file = ev.currentTarget.files?.[0];
   const preview = $("#framePhotoPreviewImage");
-  const backdrop = $("#framePhotoBackdrop");
   if (window.__framePhotoPreviewUrl) URL.revokeObjectURL(window.__framePhotoPreviewUrl);
   window.__framePhotoPreviewUrl = null;
   if (!file) {
     preview.hidden = true;
     preview.removeAttribute("src");
     preview.style.cssText = "";
-    backdrop.hidden = true;
-    backdrop.removeAttribute("src");
     refreshPhotoboothFramePreview();
     return;
   }
   window.__framePhotoPreviewUrl = URL.createObjectURL(file);
-  backdrop.src = window.__framePhotoPreviewUrl;
-  backdrop.hidden = false;
   preview.onload = () => {
     const frames = window.activePhotoboothFrames || {};
     const orientation = preview.naturalWidth >= preview.naturalHeight ? "landscape" : "portrait";
@@ -780,7 +775,6 @@ function refreshPhotoboothFramePreview() {
   if (!frame) {
     overlay.hidden = true;
     overlay.removeAttribute("src");
-    $("#framePhotoBackdrop").hidden = true;
     if (photo) {
       photo.style.cssText = "";
       if (photo.naturalWidth && !photo.hidden) sample.style.aspectRatio = `${photo.naturalWidth} / ${photo.naturalHeight}`;
@@ -794,7 +788,9 @@ function refreshPhotoboothFramePreview() {
     if (message) message.textContent = status;
     return;
   }
-  sample.style.aspectRatio = `${frame.width} / ${frame.height}`;
+  sample.style.aspectRatio = photo?.naturalWidth && !photo.hidden
+    ? `${photo.naturalWidth} / ${photo.naturalHeight}`
+    : `${frame.width} / ${frame.height}`;
   if (window.__frameOverlayPreviewFile !== frame.file) {
     if (window.__frameOverlayPreviewUrl) URL.revokeObjectURL(window.__frameOverlayPreviewUrl);
     window.__frameOverlayPreviewFile = frame.file;
@@ -802,68 +798,11 @@ function refreshPhotoboothFramePreview() {
   }
   overlay.src = window.__frameOverlayPreviewUrl;
   overlay.hidden = false;
-  if (overlay.complete && overlay.naturalWidth) updateFramePhotoPreviewOpening();
-  else overlay.onload = updateFramePhotoPreviewOpening;
   const message = $("#framePreviewMessage");
   if (message) message.textContent = photo?.naturalWidth && !photo.hidden
     ? `ตัวอย่างภาพ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · ระบบเลือกกรอบที่ตรงแนวให้อัตโนมัติ`
     : `ตัวอย่างกรอบ${orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} · เลือกรูปจริงเพื่อดูการจัดวางกับภาพของคุณ`;
   updateFramePreviewTransform();
-}
-
-function updateFramePhotoPreviewOpening() {
-  const photo = $("#framePhotoPreviewImage");
-  const backdrop = $("#framePhotoBackdrop");
-  const overlay = $("#frameOverlayPreview");
-  if (!photo?.naturalWidth || photo.hidden || !overlay?.naturalWidth) return;
-  if (backdrop.src !== photo.src) backdrop.src = photo.src;
-  backdrop.hidden = false;
-  const opening = getFrameOpening(overlay);
-  if (!opening) return;
-  const scale = Number($("#frameScale")?.value || 100) / 100;
-  const offsetX = Number($("#frameOffsetX")?.value || 0) / 100;
-  const offsetY = Number($("#frameOffsetY")?.value || 0) / 100;
-  const left = opening.x / 100, top = opening.y / 100;
-  const right = left + opening.width / 100, bottom = top + opening.height / 100;
-  photo.style.left = `${((left - .5) * scale + .5 + offsetX) * 100}%`;
-  photo.style.top = `${((top - .5) * scale + .5 + offsetY) * 100}%`;
-  photo.style.width = `${(right - left) * scale * 100}%`;
-  photo.style.height = `${(bottom - top) * scale * 100}%`;
-  photo.style.right = "auto";
-  photo.style.bottom = "auto";
-  photo.style.objectFit = "cover";
-}
-
-function getFrameOpening(image) {
-  try {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvas.height = 96;
-    const context = canvas.getContext("2d", { willReadFrequently: true });
-    context.drawImage(image, 0, 0, 96, 96);
-    const pixels = context.getImageData(0, 0, 96, 96).data;
-    const alpha = (x, y) => pixels[(y * 96 + x) * 4 + 3];
-    let seed = null;
-    for (let radius = 0; radius <= 9 && !seed; radius++) {
-      for (let y = 48 - radius; y <= 48 + radius && !seed; y++) for (let x = 48 - radius; x <= 48 + radius; x++) {
-        if (x >= 0 && y >= 0 && x < 96 && y < 96 && alpha(x, y) < 40) { seed = [x, y]; break; }
-      }
-    }
-    if (!seed) return null;
-    const queue = [seed], seen = new Set([seed[1] * 96 + seed[0]]);
-    let minX = seed[0], maxX = seed[0], minY = seed[1], maxY = seed[1];
-    for (let i = 0; i < queue.length; i++) {
-      const [x, y] = queue[i];
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x);
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y);
-      for (const [nx, ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]) {
-        const key = ny * 96 + nx;
-        if (nx >= 0 && ny >= 0 && nx < 96 && ny < 96 && !seen.has(key) && alpha(nx, ny) < 40) { seen.add(key); queue.push([nx, ny]); }
-      }
-    }
-    const insetX = Math.max(1, (maxX - minX + 1) * .012), insetY = Math.max(1, (maxY - minY + 1) * .012);
-    minX += insetX; maxX += 1 - insetX; minY += insetY; maxY += 1 - insetY;
-    return { x: minX / 96 * 100, y: minY / 96 * 100, width: (maxX - minX) / 96 * 100, height: (maxY - minY) / 96 * 100 };
-  } catch (_) { return null; }
 }
 
 function updateFramePreviewTransform() {
@@ -874,7 +813,6 @@ function updateFramePreviewTransform() {
   $("#frameXValue").value = `${x}%`;
   $("#frameYValue").value = `${y}%`;
   $("#frameOverlayPreview").style.transform = `translate(${x}%, ${y}%) scale(${scale})`;
-  updateFramePhotoPreviewOpening();
 }
 
 async function uploadPhotoboothFrame(eventId, file, orientation) {

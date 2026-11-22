@@ -6,7 +6,7 @@ from PIL import Image
 from PIL import ImageStat
 
 from local.app.processing.corrections import apply_natural_corrections
-from local.app.processing.pipeline import _face_safe_crop, apply_photobooth_frame, fit_long_edge, open_source_image, save_jpeg_atomic
+from local.app.processing.pipeline import apply_photobooth_frame, fit_long_edge, open_source_image, save_jpeg_atomic
 from local.app.models import Event
 from local.app.security import make_session, valid_session
 from local.app.utils.files import atomic_copy, safe_slug, sha256_file, unique_path, wait_until_stable
@@ -154,48 +154,6 @@ def test_photobooth_frame_preserves_artwork_aspect_ratio(tmp_path: Path):
 
     result = apply_photobooth_frame(Image.new("RGB", (600, 400), "white"), event)
 
-    assert result.size == (600, 300)
+    assert result.size == (600, 400)
     assert result.getpixel((10, 10))[0] > result.getpixel((10, 10))[1]
     assert result.getpixel((300, 150)) == (255, 255, 255)
-
-
-def test_photobooth_frame_fits_entire_photo_inside_opening(tmp_path: Path):
-    cache = tmp_path / "CACHE"
-    cache.mkdir()
-    frame = Image.new("RGBA", (300, 600), (255, 0, 0, 255))
-    frame.paste((0, 0, 0, 0), (50, 50, 250, 550))
-    frame.save(cache / "photobooth-frame-portrait.png")
-    event = Event(root_path=str(tmp_path), gallery_json='{"photobooth_frame_enabled": true}')
-    # A source with a different portrait ratio includes colored top and bottom
-    # markers; contain fitting must preserve both inside the frame opening.
-    source = Image.new("RGB", (400, 600), "white")
-    source.paste((0, 0, 255), (0, 0, 400, 60))
-    source.paste((0, 255, 0), (0, 540, 400, 600))
-
-    result = apply_photobooth_frame(source, event)
-
-    assert result.size == (300, 600)
-    assert result.getpixel((150, 165))[2] > result.getpixel((150, 165))[0]
-    assert result.getpixel((150, 430))[1] > result.getpixel((150, 430))[0]
-
-
-def test_face_safe_crop_fills_opening_without_cutting_detected_group():
-    image = Image.new("RGB", (1200, 800), "white")
-    faces = [(360, 170, 70, 70), (470, 180, 66, 66)]
-    image.paste((255, 0, 0), (360, 170, 430, 240))
-    image.paste((0, 0, 255), (470, 180, 536, 246))
-
-    crop = _face_safe_crop(image, target_aspect=1.2, faces=faces)
-
-    assert crop is not None
-    assert abs(crop.width / crop.height - 1.2) < .01
-    visible_colors = set(crop.getcolors(crop.width * crop.height))
-    assert (255, 0, 0) in {color for _, color in visible_colors}
-    assert (0, 0, 255) in {color for _, color in visible_colors}
-
-
-def test_face_safe_crop_preserves_wide_group_when_crop_cannot_fit_faces():
-    image = Image.new("RGB", (1200, 800), "white")
-    faces = [(100, 180, 80, 80), (1000, 180, 80, 80)]
-
-    assert _face_safe_crop(image, target_aspect=.7, faces=faces) is None

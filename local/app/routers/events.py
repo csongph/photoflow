@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..models import Event, Job, Photo, Setting, Upload
-from ..processing.pipeline import _frame_aperture
 from ..schemas.local import EventCreate, EventOut
 from ..security import COOKIE_NAME, auth_enabled, valid_session
 from ..sync.cloud import CloudSyncError, delete_cloud_event, enabled as cloud_sync_enabled
@@ -467,8 +466,6 @@ async def upload_photobooth_frame(
                 raise HTTPException(422, "PNG ต้องมีส่วนโปร่งใสเพื่อให้เห็นภาพถ่ายด้านใน")
             if rgba.width < 300 or rgba.height < 300 or rgba.width > 8000 or rgba.height > 8000:
                 raise HTTPException(422, "ขนาดกรอบต้องอยู่ระหว่าง 300 ถึง 8000 พิกเซลต่อด้าน")
-            if _frame_aperture(rgba) is None:
-                raise HTTPException(422, "ตรวจไม่พบช่องโปร่งใสขนาดใหญ่ตรงกลางกรอบ กรุณาใช้ PNG ที่มีช่องภาพชัดเจน")
     except HTTPException:
         raise
     except Exception as exc:
