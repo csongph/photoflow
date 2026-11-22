@@ -228,10 +228,6 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
             "find_my_photos": False,
             "credit_text": settings.credit_text if settings and settings.credit_text else "Photo Booth Experience by CS.BXXM STUDIO",
             "report_contact": settings.report_contact if settings else "",
-            "card_maker_enabled": bool(not locked and settings and settings.allow_download and settings.card_maker_enabled and has_card_template),
-            "card_template_name": settings.card_template_name if settings else "",
-            "photo_strip_enabled": bool(not locked and settings and settings.enabled and settings.allow_download and settings.photo_strip_enabled and strip_config.get("enabled") and strip_available),
-            "photo_strip_theme": active_theme,
             "locked": locked,
             "requires_pin": bool(event.pin_hash),
         },
@@ -240,6 +236,7 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
 
 @router.get("/{public_id}/card-template.png")
 def card_template(public_id: str, request: Request, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Card maker is no longer supported")
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")
@@ -256,6 +253,7 @@ def card_template(public_id: str, request: Request, db: Session = Depends(get_db
 
 @router.get("/{public_id}/photo-strip/{theme_id}/{photo_count}.png")
 def photo_strip_template(public_id: str, theme_id: str, photo_count: int, request: Request, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.query(Event).filter(Event.public_id == public_id).first()
     if not event:
         raise HTTPException(404, "Gallery not found")

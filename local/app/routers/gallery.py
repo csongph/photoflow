@@ -169,10 +169,6 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
             "find_my_photos": False,
             "credit_text": settings.get("credit_text") or "Photo Booth Experience by CS.BXXM STUDIO",
             "report_contact": settings.get("report_contact") or "",
-            "card_maker_enabled": bool(settings.get("card_maker_enabled")) and bool(settings.get("allow_download", True)) and not locked and (Path(event.root_path) / "CACHE" / "card-template.png").is_file(),
-            "card_template_name": settings.get("card_template_name") or "",
-            "photo_strip_enabled": bool(strip.get("enabled") and settings.get("allow_download", True) and not locked and strip_available),
-            "photo_strip_theme": active_strip_theme,
             "locked": locked,
             "requires_pin": bool(gallery_pin(event)),
         },
@@ -181,6 +177,7 @@ def gallery(public_id: str, request: Request, db: Session = Depends(get_db), res
 
 @router.get("/{public_id}/card-template.png")
 def card_template(public_id: str, request: Request, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Card maker is no longer supported")
     event = event_by_public_id(db, public_id)
     if not has_gallery_access(event, request):
         require_gallery_access(event)
@@ -307,6 +304,7 @@ def download_links(public_id: str, request: Request, db: Session = Depends(get_d
 
 @router.get("/{public_id}/photo-strip/{theme_id}/{photo_count}.png")
 def photo_strip_template(public_id: str, theme_id: str, photo_count: int, request: Request, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = event_by_public_id(db, public_id)
     if not has_gallery_access(event, request):
         require_gallery_access(event)

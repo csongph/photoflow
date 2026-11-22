@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/css/gallery.css?v=20261122-photostrip-1">
+  <link rel="stylesheet" href="/css/gallery.css?v=20261122-remove-card-strip">
 </head>
 <body class="theme-dark">
   <!-- Top Navigation -->
@@ -155,12 +155,6 @@
         <button class="btn btn-primary dock-btn" onclick="toggleSelectionMode()" id="downloadLinks">
           <span class="btn-icon">✓</span> เลือกรูปเพื่อบันทึก
         </button>
-        <button class="btn btn-secondary dock-btn" onclick="startCardMakerSelection()" id="cardMakerStartBtn" hidden>
-          <span class="btn-icon">▤</span> ทำการ์ดภาพ
-        </button>
-        <button class="btn btn-secondary dock-btn" onclick="openPhotoStripSetup()" id="photoStripStartBtn" hidden>
-          <span class="btn-icon">▤</span> ทำ Photo Strip
-        </button>
         <button class="btn btn-secondary dock-btn" onclick="shareGalleryNative()">
           <span class="btn-icon">🔗</span> แชร์แกลเลอรี
         </button>
@@ -170,8 +164,6 @@
         <span id="selectedCount" class="selection-pill">เลือก 0 รูป</span>
         <button class="btn btn-secondary dock-btn" onclick="selectAllPhotos()" id="selectAllBtn">เลือกทั้งหมด</button>
         <button class="btn btn-ghost dock-btn" onclick="clearPhotoSelection()" id="clearSelectionBtn">ล้างที่เลือก</button>
-        <button id="makeCardBtn" class="btn btn-secondary dock-btn" onclick="createCardFromSelection()" hidden disabled><span class="btn-icon">▤</span> สร้างการ์ด</button>
-        <button id="makePhotoStripBtn" class="btn btn-secondary dock-btn" onclick="createPhotoStripFromSelection()" hidden disabled><span class="btn-icon">▤</span> สร้าง Photo Strip</button>
         <button id="downloadSelectedBtn" class="btn btn-primary dock-btn" onclick="downloadSelectedPhotos(event)" disabled>
           <span class="btn-icon">↓</span> ดาวน์โหลดที่เลือก
         </button>
@@ -220,63 +212,12 @@
     </div>
   </dialog>
 
-  <dialog id="cardMakerDialog" class="card-maker-dialog" onclick="if(event.target===this) closeCardMaker()">
-    <section class="card-maker-content">
-      <button type="button" class="gallery-qr-close" onclick="closeCardMaker()" aria-label="ปิด">✕</button>
-      <p class="section-eyebrow">PHOTO CARD STUDIO</p>
-      <h2>การ์ดภาพของคุณ</h2>
-      <p id="cardMakerStatus" class="card-maker-status" aria-live="polite">กำลังจัดวางรูปภาพ…</p>
-      <canvas id="cardMakerCanvas" aria-label="ตัวอย่างการ์ดภาพ"></canvas>
-      <div class="card-maker-actions">
-        <button type="button" class="btn btn-primary" id="saveCardButton" onclick="savePhotoCard()" disabled>↓ บันทึกการ์ด</button>
-        <button type="button" class="btn btn-secondary" id="shareCardButton" onclick="sharePhotoCard()" disabled>↗ แชร์การ์ด</button>
-      </div>
-    </section>
-  </dialog>
-
-  <dialog id="photoStripCountDialog" class="card-maker-dialog" onclick="if(event.target===this) closePhotoStripSetup()">
-    <section class="card-maker-content photo-strip-setup-content">
-      <button type="button" class="gallery-qr-close" onclick="closePhotoStripSetup()" aria-label="ปิด">✕</button>
-      <p class="section-eyebrow">PHOTO STRIP STUDIO</p>
-      <h2 id="photoStripThemeTitle">Photo Strip</h2>
-      <p id="photoStripThemeDescription" class="card-maker-status"></p>
-      <div class="photo-strip-count-options" role="group" aria-label="เลือกจำนวนภาพ">
-        <button type="button" data-strip-count="2" onclick="choosePhotoStripCount(2)">2 ภาพ</button>
-        <button type="button" data-strip-count="3" onclick="choosePhotoStripCount(3)">3 ภาพ</button>
-        <button type="button" data-strip-count="4" onclick="choosePhotoStripCount(4)">4 ภาพ</button>
-      </div>
-      <button type="button" class="btn btn-primary" id="beginPhotoStripSelection" onclick="beginPhotoStripSelection()">เลือกรูป</button>
-    </section>
-  </dialog>
-  <dialog id="photoStripEditorDialog" class="photo-strip-editor-dialog" onclick="if(event.target===this) closePhotoStripEditor()">
-    <section class="photo-strip-editor-content">
-      <header class="photo-strip-editor-header"><div><p class="section-eyebrow">PHOTO STRIP EDITOR</p><h2 id="photoStripEditorTitle">ปรับ Photo Strip</h2></div><button type="button" class="gallery-qr-close" onclick="closePhotoStripEditor()" aria-label="ปิด">✕</button></header>
-      <p id="photoStripEditorStatus" class="card-maker-status" aria-live="polite">ลากรูปเพื่อจัดตำแหน่งในช่อง</p>
-      <canvas id="photoStripCanvas" aria-label="ตัวอย่าง Photo Strip ที่กำลังแก้ไข"></canvas>
-      <div id="photoStripSlotControls" class="photo-strip-slot-controls"></div>
-      <div class="photo-strip-edit-toolbar">
-        <label>ซูม <input id="photoStripZoom" type="range" min="1" max="3" step="0.01" value="1"></label>
-        <button type="button" class="btn btn-secondary" onclick="rotatePhotoStripSlot(-90)">↶ 90°</button>
-        <button type="button" class="btn btn-secondary" onclick="rotatePhotoStripSlot(90)">↻ 90°</button>
-        <button type="button" class="btn btn-secondary" onclick="movePhotoStripSlot(-1)">↑ เลื่อนช่อง</button>
-        <button type="button" class="btn btn-secondary" onclick="movePhotoStripSlot(1)">↓ เลื่อนช่อง</button>
-        <button type="button" class="btn btn-ghost" onclick="undoPhotoStripEdit()">↶ ย้อนกลับ</button>
-        <button type="button" class="btn btn-ghost" onclick="resetPhotoStripSlot()">รีเซ็ตช่องนี้</button>
-      </div>
-      <div id="photoStripSelectedPhotos" class="photo-strip-selected-photos"></div>
-      <div class="photo-strip-export-actions">
-        <button type="button" class="btn btn-primary" id="exportPhotoStripButton" onclick="exportPhotoStripJpg()">สร้างไฟล์ JPG</button>
-        <button type="button" class="btn btn-secondary" id="downloadPhotoStripButton" onclick="downloadPhotoStripJpg()" disabled>↓ ดาวน์โหลด JPG</button>
-        <button type="button" class="btn btn-secondary" id="sharePhotoStripButton" onclick="sharePhotoStripJpg()" disabled>↗ แชร์</button>
-      </div>
-    </section>
-  </dialog>
 
   <!-- Toast Notification Container -->
   <div id="toastContainer" class="toast-container"></div>
 
   <script>window.MOMENTLINK_API_URL="";</script>
-  <script src="/js/gallery.js?v=20261122-photostrip-1"></script>
+  <script src="/js/gallery.js?v=20261122-remove-card-strip"></script>
   <script>initGallery()</script>
 </body>
 </html>

@@ -499,6 +499,7 @@ async def upload_card_template(
     enabled: bool = Form(True),
     db: Session = Depends(get_db),
 ):
+    raise HTTPException(404, "Card templates are no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -567,6 +568,7 @@ async def upload_card_template(
 
 @router.get("/{event_id}/photo-strip")
 def get_photo_strip_settings(event_id: str, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -590,6 +592,7 @@ def get_photo_strip_settings(event_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{event_id}/photo-strip/themes/{theme_id}/layouts/{photo_count}.png")
 def preview_photo_strip_layout(event_id: str, theme_id: str, photo_count: int, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -609,6 +612,7 @@ def preview_photo_strip_layout(event_id: str, theme_id: str, photo_count: int, d
 
 @router.put("/{event_id}/photo-strip")
 def update_photo_strip_settings(event_id: str, payload: dict, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -645,6 +649,7 @@ def update_photo_strip_settings(event_id: str, payload: dict, db: Session = Depe
 
 @router.delete("/{event_id}/photo-strip/themes/{theme_id}")
 def delete_photo_strip_theme(event_id: str, theme_id: str, db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
@@ -672,6 +677,7 @@ def delete_photo_strip_theme(event_id: str, theme_id: str, db: Session = Depends
 
 @router.post("/{event_id}/photo-strip/themes/{theme_id}/layouts/{photo_count}")
 async def upload_photo_strip_layout(event_id: str, theme_id: str, photo_count: int, template: UploadFile = File(...), db: Session = Depends(get_db)):
+    raise HTTPException(404, "Photo Strip is no longer supported")
     event = db.get(Event, event_id)
     if not event:
         raise HTTPException(404, "Event not found")
