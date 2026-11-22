@@ -202,11 +202,19 @@ def event_preflight(db: Session, event: Event) -> dict:
         for orientation, label in (("portrait", "แนวตั้ง"), ("landscape", "แนวนอน")):
             frame_path = frame_cache / f"photobooth-frame-{orientation}.png"
             exists = frame_path.is_file()
+            frame_details = ""
+            if exists:
+                try:
+                    with Image.open(frame_path) as frame_image:
+                        frame_details = f" · {frame_image.width} × {frame_image.height} px"
+                except Exception:
+                    exists = False
+                    frame_details = " · เปิดไฟล์ไม่ได้"
             checks.append({
                 "key": f"photobooth_frame_{orientation}",
                 "ok": exists,
                 "required": True,
-                "message": f"กรอบ{label} {'พร้อมใช้' if exists else 'ยังไม่ได้อัปโหลด'}: {frame_path.name}",
+                "message": f"กรอบ{label} {'พร้อมใช้' if exists else 'ยังไม่ได้อัปโหลดหรือไฟล์เสีย'}: {frame_path.name}{frame_details}",
             })
 
     drive_required = event_drive_required(event)
