@@ -441,7 +441,7 @@ async function loadEvents() {
     <label><span>รายละเอียดเพิ่มเติม</span><textarea name="description"></textarea></label>
     <label><span>วันที่จัดงาน</span><input name="event_date" type="date"></label>
     <div class="empty-state" style="min-height:auto;padding:18px;text-align:left;place-items:start"><b>เก็บไฟล์ต้นฉบับไว้เสมอ</b><br><span>ระบบสร้าง FINISHED/PREVIEW/THUMBNAIL สำหรับแกลเลอรี ส่วนการปรับสีหรือแสงจะไม่ทำอัตโนมัติ</span></div>
-    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG แบบ Overlay ที่มีพื้นหลังโปร่งใส เลือกได้สูงสุด 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะปรับกรอบให้พอดีกับรูปโดยคงรูปถ่ายไว้เต็มใบ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG แบบพื้นหลังโปร่งใส</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" name="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" name="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" name="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
+    <section class="frame-setup"><p class="kicker">CUSTOM PHOTO FRAME</p><h2>อัปโหลดกรอบของคุณ</h2><p class="muted">ใช้กรอบ PNG แบบ Overlay ที่มีพื้นหลังโปร่งใส ถ้าเปิดใช้กรอบ ต้องเลือกให้ครบ 2 ไฟล์: แนวตั้ง 1 ไฟล์ และแนวนอน 1 ไฟล์ ระบบจะปรับกรอบให้พอดีกับรูปโดยคงรูปถ่ายไว้เต็มใบ</p><label class="check"><input type="checkbox" name="photobooth_frame_enabled">ใช้กรอบกับรูปอัตโนมัติ</label><label><span>ไฟล์กรอบ PNG · ไม่เกิน 20 MB ต่อไฟล์</span><input id="photoboothFrameFiles" type="file" accept="image/png,.png" multiple></label><p id="frameAutoStatus" class="muted frame-auto-status" aria-live="polite">อัปโหลดกรอบ PNG แบบพื้นหลังโปร่งใส</p><label><span>เลือกรูปจริงเพื่อทดลองจัดกรอบ (ไม่บังคับ)</span><input id="framePreviewPhoto" type="file" accept="image/*"></label><details class="frame-advanced"><summary>ปรับตำแหน่งเพิ่มเติม</summary><div class="frame-adjustments"><label><span>ขนาดกรอบ <output id="frameScaleValue">100%</output></span><input id="frameScale" name="frameScale" type="range" min="70" max="135" value="100"></label><label><span>เลื่อนแนวนอน <output id="frameXValue">0%</output></span><input id="frameOffsetX" name="frameOffsetX" type="range" min="-15" max="15" value="0"></label><label><span>เลื่อนแนวตั้ง <output id="frameYValue">0%</output></span><input id="frameOffsetY" name="frameOffsetY" type="range" min="-15" max="15" value="0"></label></div></details><div class="frame-simulator"><div class="frame-sample" id="frameSample"><span>PHOTO<br>BOOTH</span><small>ตัวอย่างงาน · 2026</small><img id="framePhotoPreviewImage" alt="ภาพตัวอย่าง" hidden><img id="frameOverlayPreview" alt="ตัวอย่างกรอบบนภาพ" hidden></div><div><b>ทดลองกรอบกับรูปจริง</b><p id="framePreviewMessage" class="muted">อัปโหลดกรอบและเลือกรูปตัวอย่างเพื่อดูผลก่อนเริ่มงาน</p></div></div><div id="frameUploadResult"></div></section>
     <h2>แกลเลอรีสำหรับผู้ร่วมงาน</h2><div class="checks"><label class="check"><input type="checkbox" name="enable_gallery" checked>เปิดแกลเลอรี</label><label class="check"><input type="checkbox" name="allow_download" checked>อนุญาตให้ดาวน์โหลด</label><label class="check"><input type="checkbox" name="instant_publish" checked disabled>แสดงรูปอัตโนมัติ</label></div>
     <label><span>รหัส PIN (ไม่บังคับ)</span><input name="optional_pin"></label>
     <label><span>เครดิตหรือชื่อสตูดิโอ</span><input name="credit_text" value="Photo Booth Experience by CS.BXXM STUDIO"></label>
@@ -584,7 +584,7 @@ async function previewPhotoboothFrame(ev) {
     $("[name=photobooth_frame_enabled]").checked = true;
     const summary = Object.values(frames).map(frame => `${frame.orientation === "landscape" ? "แนวนอน" : "แนวตั้ง"} ${frame.width} × ${frame.height}`).join(" · ");
     setFrameAutoStatus(files.length === 1
-      ? `ตรวจพบกรอบ${Object.keys(frames)[0] === "landscape" ? "แนวนอน" : "แนวตั้ง"} (${summary}) · รูปอีกแนวจะคงภาพเดิมเพื่อไม่ให้กรอบผิดสัดส่วน`
+      ? `พบกรอบ${Object.keys(frames)[0] === "landscape" ? "แนวนอน" : "แนวตั้ง"} (${summary}) แต่ยังขาดอีกแนว · เพิ่มกรอบแนวตั้งและแนวนอนให้ครบก่อนสร้างงาน`
       : `ตรวจพบกรอบครบสองแนว (${summary}) · ระบบจะเลือกให้ตรงกับภาพแต่ละใบ`);
     refreshPhotoboothFramePreview();
   } catch (error) {
@@ -738,9 +738,11 @@ async function createEvent(ev) {
   const f = new FormData(ev.target);
   const checked = (k) => f.get(k) === "on";
   let frameFiles = Object.entries(window.activePhotoboothFrames || {}).map(([orientation, meta]) => [orientation, meta.file]);
+  const selectedFrameOrientations = new Set(frameFiles.map(([orientation]) => orientation));
   const frameEnabled = checked("photobooth_frame_enabled");
-  if (frameEnabled && !frameFiles.length) {
-    alert("อัปโหลดกรอบ PNG อย่างน้อยหนึ่งไฟล์ก่อนเปิดใช้กรอบอัตโนมัติ");
+  if (frameEnabled && (!selectedFrameOrientations.has("portrait") || !selectedFrameOrientations.has("landscape"))) {
+    setFrameAutoStatus("ต้องเลือกกรอบ PNG ให้ครบทั้งแนวตั้งและแนวนอนก่อนสร้างงาน", true);
+    alert("กรุณาเลือกกรอบ PNG ให้ครบ 2 แนว: แนวตั้ง 1 ไฟล์และแนวนอน 1 ไฟล์");
     return;
   }
   try {
@@ -765,8 +767,7 @@ async function createEvent(ev) {
       const results = [];
       for (const [orientation, file] of frameFiles) results.push(await uploadPhotoboothFrame(event.id, file, orientation));
       const reprocessed = await api(`/api/events/${event.id}/photos/reprocess`, { method: "POST" });
-      const orientationNote = results.length === 1 ? " · รูปอีกแนวจะแสดงโดยไม่ใส่กรอบเพื่อรักษาสัดส่วน" : "";
-      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบ${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")} สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว${orientationNote}</div>`;
+      frameStatus = `<div class="frame-upload-success">อัปโหลดกรอบครบสองแนว (${results.map(item => `${item.orientation} ${item.width} × ${item.height} px`).join(" และ ")}) สำเร็จ · ส่งรูปเดิม ${reprocessed.queued} รูปไปใส่กรอบแล้ว</div>`;
     } catch (err) {
       frameStatus = `<div id="frameUploadResult" class="frame-upload-error">สร้างงานแล้ว แต่บันทึกกรอบไม่สำเร็จ: ${html(err.message)} <button type="button" class="secondary" onclick='retryPhotoboothFrame(${jsArg(event.id)})'>ลองอัปโหลดอีกครั้ง</button></div>`;
     }

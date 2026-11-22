@@ -196,6 +196,19 @@ def event_preflight(db: Session, event: Event) -> dict:
     local_only = "127.0.0.1" in public_url or "localhost" in public_url
     checks.append({"key": "public_gallery_url", "ok": not local_only, "required": True, "message": public_url})
 
+    frame_settings = gallery_settings(event)
+    if frame_settings.get("photobooth_frame_enabled"):
+        frame_cache = Path(event.root_path) / "CACHE"
+        for orientation, label in (("portrait", "แนวตั้ง"), ("landscape", "แนวนอน")):
+            frame_path = frame_cache / f"photobooth-frame-{orientation}.png"
+            exists = frame_path.is_file()
+            checks.append({
+                "key": f"photobooth_frame_{orientation}",
+                "ok": exists,
+                "required": True,
+                "message": f"กรอบ{label} {'พร้อมใช้' if exists else 'ยังไม่ได้อัปโหลด'}: {frame_path.name}",
+            })
+
     drive_required = event_drive_required(event)
     google_connected = bool(db.get(Setting, "google_refresh_token") and db.get(Setting, "google_refresh_token").value)
     checks.append({

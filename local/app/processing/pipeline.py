@@ -67,9 +67,10 @@ def apply_photobooth_frame(img: Image.Image, event: Event) -> Image.Image:
     frame_path = cache / f"photobooth-frame-{orientation}.png"
     if not frame_path.is_file():
         if gallery.get("photobooth_frame_auto_orientation"):
-            # New frame sets are orientation-aware: never crop a portrait design
-            # into landscape (or vice versa) and silently damage the artwork.
-            return img
+            # Never silently publish a photo without the selected frame set.
+            # Event preflight requires both files; this catches files removed
+            # after the event has already started.
+            raise RuntimeError(f"Photobooth {orientation} frame is missing; upload both portrait and landscape frames")
         alternate = cache / f"photobooth-frame-{'portrait' if orientation == 'landscape' else 'landscape'}.png"
         legacy = cache / "photobooth-frame.png"
         frame_path = alternate if alternate.is_file() else legacy

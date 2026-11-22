@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 import os
 
+from alembic import command
+from alembic.config import Config
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
@@ -19,6 +21,13 @@ gallery_origins = [origin.strip().rstrip("/") for origin in configured_origins.s
 app.add_middleware(CORSMiddleware, allow_origins=gallery_origins, allow_credentials=True, allow_methods=["GET", "POST", "DELETE", "OPTIONS"], allow_headers=["*"])
 app.include_router(sync.router)
 app.include_router(gallery.router)
+
+
+@app.on_event("startup")
+def upgrade_database_schema() -> None:
+    """Apply pending Alembic migrations before serving sync or gallery requests."""
+    config_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+    command.upgrade(Config(str(config_path)), "head")
 
 if GALLERY_DIR.exists():
     app.mount("/css", StaticFiles(directory=GALLERY_DIR / "css"), name="gallery-css")
