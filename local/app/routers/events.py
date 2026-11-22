@@ -49,6 +49,19 @@ def enqueue_unique_job(db: Session, event_id: str, job_type: str, photo_id: str 
         db.add(Job(event_id=event_id, photo_id=photo_id, type=job_type, priority=priority))
 
 
+def enqueue_reprocess_job(db: Session, event_id: str, photo_id: str, priority: int = 15) -> None:
+    # A currently running process cannot be interrupted. Supersede only queued
+    # retries and always schedule a fresh pass so it picks up newly uploaded
+    # frame assets when the older worker finishes.
+    db.query(Job).filter(
+        Job.event_id == event_id,
+        Job.photo_id == photo_id,
+        Job.type == "PROCESS_PHOTO",
+        Job.state.in_(["QUEUED", "RETRYING"]),
+    ).update({Job.state: "FAILED", Job.error: "Superseded by a newer reprocess request"}, synchronize_session=False)
+    db.add(Job(event_id=event_id, photo_id=photo_id, type="PROCESS_PHOTO", priority=priority))
+
+
 def to_out(db: Session, event: Event) -> EventOut:
     return EventOut(
         id=event.id,
@@ -462,6 +475,10 @@ async def upload_photobooth_frame(
                 raise HTTPException(415, "รองรับเฉพาะไฟล์ PNG")
             source.load()
             rgba = source.convert("RGBA")
+            detected_orientation = "landscape" if rgba.width >= rgba.height else "portrait"
+            if detected_orientation != orientation:
+                expected = "แนวนอน" if orientation == "landscape" else "แนวตั้ง"
+                raise HTTPException(422, f"ไฟล์นี้เป็นกรอบ{('แนวนอน' if detected_orientation == 'landscape' else 'แนวตั้ง')} แต่ระบุเป็นกรอบ{expected}")
             if min(rgba.getchannel("A").getextrema()) == 255:
                 raise HTTPException(422, "PNG ต้องมีส่วนโปร่งใสเพื่อให้เห็นภาพถ่ายด้านใน")
             if rgba.width < 300 or rgba.height < 300 or rgba.width > 8000 or rgba.height > 8000:
@@ -1062,7 +1079,7 @@ def reprocess_photo(event_id: str, photo_id: str, db: Session = Depends(get_db))
     photo.status = "QUEUED"
     photo.error = ""
     photo.published = False
-    db.add(Job(event_id=event.id, photo_id=photo.id, type="PROCESS_PHOTO", priority=10))
+    enqueue_reprocess_job(db, event.id, photo.id, priority=10)
     db.commit()
     return {"ok": True, "photo_id": photo.id}
 
@@ -1084,7 +1101,7 @@ def reprocess_photos(event_id: str, db: Session = Depends(get_db)):
             upload.state = "QUEUED"
             upload.object_id = ""
             upload.error = ""
-        enqueue_unique_job(db, event.id, "PROCESS_PHOTO", photo.id, 15)
+        enqueue_reprocess_job(db, event.id, photo.id, priority=15)
         count += 1
     db.commit()
     return {"ok": True, "queued": count}

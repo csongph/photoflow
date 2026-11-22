@@ -26,7 +26,10 @@ def open_source_image(path: Path) -> Image.Image:
     if path.suffix.lower() not in IMAGE_EXTENSIONS:
         raise UnsupportedRawError("Unsupported file type")
     with Image.open(path) as source:
-        rgba = source.convert("RGBA")
+        # Apply camera rotation before converting modes. Converting a JPEG
+        # first can discard its EXIF orientation, which makes landscape shots
+        # look portrait to the frame auto-selector.
+        rgba = ImageOps.exif_transpose(source).convert("RGBA")
     if rgba.getchannel("A").getextrema()[0] < 255:
         # Flatten transparent cutouts before dropping alpha. PNG editors often
         # keep a checkerboard preview in the hidden RGB pixels; converting

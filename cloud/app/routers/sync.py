@@ -9,6 +9,7 @@ import re
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, UploadFile
 from PIL import Image
 from io import BytesIO
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..database import get_db
@@ -89,22 +90,33 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
     name = str(payload.get("name") or "").strip()
     if not name or len(name) > 180:
         raise HTTPException(422, "Invalid event name")
-    event = db.query(Event).filter(Event.public_id == public_id).first() or Event(public_id=public_id)
-    event.name = name
     event_date = str(payload.get("event_date") or "").strip()
     description = str(payload.get("description") or "").strip()
     if len(event_date) > 20 or len(description) > 10000:
         raise HTTPException(422, "Invalid event metadata")
-    event.event_date = event_date
-    event.description = description
     incoming_settings = payload.get("gallery_settings")
     incoming_settings = incoming_settings if isinstance(incoming_settings, dict) else {}
     incoming_pin_hash = str(incoming_settings.get("pin_hash") or "").strip()
     if incoming_pin_hash and (len(incoming_pin_hash) != 64 or any(ch not in "0123456789abcdef" for ch in incoming_pin_hash.lower())):
         raise HTTPException(422, "Invalid gallery PIN hash")
+    # SYNC_PHOTO jobs can run on several local workers at once. Two requests
+    # may both observe a missing event (or settings row), so recover from the
+    # winner's unique-key insert instead of returning a 500 to photo jobs.
+    event = db.query(Event).filter(Event.public_id == public_id).first()
+    if event is None:
+        event = Event(public_id=public_id)
+        db.add(event)
+        try:
+            db.flush()
+        except IntegrityError:
+            db.rollback()
+            event = db.query(Event).filter(Event.public_id == public_id).first()
+            if event is None:
+                raise
+    event.name = name
+    event.event_date = event_date
+    event.description = description
     event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
-    db.add(event)
-    db.flush()
     allowed = {"allow_download", "auto_refresh", "credit_text", "report_contact", "card_maker_enabled", "card_template_name", "photo_strip_enabled", "photo_strip_config_json"}
     gallery_settings = {k: v for k, v in incoming_settings.items() if k in allowed}
     enabled = incoming_settings.get("enable_gallery", True)
@@ -137,13 +149,37 @@ def sync_event(payload: dict, db: Session = Depends(get_db), _: None = Depends(r
         value = incoming_settings.get(key, "")
         if not isinstance(value, str) or len(value) > limit:
             raise HTTPException(422, f"Invalid gallery setting: {key}")
-    current_settings = db.get(GallerySettings, event.id) or GallerySettings(event_id=event.id)
+    current_settings = db.get(GallerySettings, event.id)
+    if current_settings is None:
+        current_settings = GallerySettings(event_id=event.id)
     for key, value in gallery_settings.items():
         setattr(current_settings, key, value)
     current_settings.photo_strip_enabled = bool(incoming_settings.get("photo_strip_enabled", current_settings.photo_strip_enabled))
     current_settings.photo_strip_config_json = strip_config_json
     db.add(current_settings)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A parallel sync may have inserted this event's GallerySettings row.
+        # Retry as an update after the competing transaction commits.
+        db.rollback()
+        event = db.query(Event).filter(Event.public_id == public_id).first()
+        if event is None:
+            raise
+        event.name = name
+        event.event_date = event_date
+        event.description = description
+        event.pin_hash = incoming_pin_hash if incoming_pin_hash else ""
+        current_settings = db.get(GallerySettings, event.id)
+        if current_settings is None:
+            raise
+        for key, value in gallery_settings.items():
+            setattr(current_settings, key, value)
+        current_settings.photo_strip_enabled = bool(incoming_settings.get("photo_strip_enabled", current_settings.photo_strip_enabled))
+        current_settings.photo_strip_config_json = strip_config_json
+        db.add(event)
+        db.add(current_settings)
+        db.commit()
     return {"event_id": event.id, "public_id": event.public_id}
 
 
