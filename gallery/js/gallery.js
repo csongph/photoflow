@@ -393,11 +393,7 @@ async function loadPhotos(reset = false) {
     if (syncText) syncText.textContent = "LIVE SYNC";
     if (publicSlideshowState) {
       const currentIndex = galleryPhotos.findIndex(photo => photo.id === publicSlideshowState.photoId);
-      if (currentIndex >= 0) {
-        publicSlideshowState.index = currentIndex;
-        const counter = document.querySelector("#publicSlideshowCounter");
-        if (counter) counter.textContent = `${currentIndex + 1} / ${galleryPhotos.length} รูป`;
-      }
+      if (currentIndex >= 0) publicSlideshowState.index = currentIndex;
       else showPublicSlideshowPhoto(publicSlideshowState.index);
     }
   } catch (err) {
@@ -533,21 +529,16 @@ function startEventSlideshow() {
       <img class="public-slideshow-image" id="publicSlideshowImageB" alt="ภาพจากงาน" aria-hidden="true">
       <div class="public-slideshow-empty" id="publicSlideshowEmpty">กำลังรอรูปภาพจากงานนี้…</div>
     </div>
-    <div class="public-slideshow-frame" aria-hidden="true">
-      <i class="frame-corner frame-top-left"></i><i class="frame-corner frame-top-right"></i>
-      <i class="frame-corner frame-bottom-left"></i><i class="frame-corner frame-bottom-right"></i>
-    </div>
     <header class="public-slideshow-heading"><span>CS.BXXM STUDIO</span><strong>${escapeHtml(galleryMeta.eventName)}</strong></header>
     <aside class="public-slideshow-qr"><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกน QR Code เพื่อดาวน์โหลดรูปภาพ</b></aside>
-    <div class="public-slideshow-counter" id="publicSlideshowCounter" aria-live="polite">กำลังโหลดภาพ</div>
     <div class="public-slideshow-controls" id="publicSlideshowControls">
       <button type="button" onclick="closeEventSlideshow()">กลับแกลเลอรี</button>
       <button type="button" onclick="togglePublicSlideshowPlayback()" id="publicSlideshowPlay">พักภาพ</button>
-      <button type="button" onclick="stepPublicSlideshow(-1)" aria-label="ภาพก่อนหน้า" title="ลูกศรซ้าย">‹ ก่อนหน้า</button>
-      <button type="button" onclick="stepPublicSlideshow(1)" aria-label="ภาพถัดไป" title="ลูกศรขวา">ถัดไป ›</button>
+      <button type="button" onclick="stepPublicSlideshow(-1)" aria-label="ภาพก่อนหน้า">‹ ก่อนหน้า</button>
+      <button type="button" onclick="stepPublicSlideshow(1)" aria-label="ภาพถัดไป">ถัดไป ›</button>
       <label>เปลี่ยนภาพ<select onchange="setPublicSlideshowTransition(this.value)"><option value="fade">Fade</option><option value="slide">Slide</option><option value="dissolve">Dissolve</option></select></label>
       <label>ความเร็ว<select onchange="setPublicSlideshowInterval(this.value)"><option value="4000">4 วินาที</option><option value="6000" selected>6 วินาที</option><option value="8000">8 วินาที</option><option value="10000">10 วินาที</option></select></label>
-      <button type="button" id="publicSlideshowFullscreen" onclick="togglePublicSlideshowFullscreen()" title="กด F เพื่อสลับเต็มจอ">เต็มจอ</button>
+      <button type="button" onclick="togglePublicSlideshowFullscreen()">เต็มจอ</button>
     </div>
   `;
   document.body.appendChild(overlay);
@@ -556,32 +547,6 @@ function startEventSlideshow() {
   document.body.classList.add("slideshow-is-open");
   const state = { index: 0, photoId: "", paused: false, transition: "fade", interval: 6000, slideTimer: null, hideTimer: null, sequence: 0, failedUrls: new Set() };
   publicSlideshowState = state;
-  state.onKeyDown = event => {
-    if (!publicSlideshowState || event.target.closest?.(".public-slideshow-controls")) return;
-    if (event.key === "ArrowRight") { event.preventDefault(); stepPublicSlideshow(1); revealPublicSlideshowControls(); }
-    else if (event.key === "ArrowLeft") { event.preventDefault(); stepPublicSlideshow(-1); revealPublicSlideshowControls(); }
-    else if (event.code === "Space") { event.preventDefault(); togglePublicSlideshowPlayback(); revealPublicSlideshowControls(); }
-    else if (event.key.toLowerCase() === "f") { event.preventDefault(); togglePublicSlideshowFullscreen(); revealPublicSlideshowControls(); }
-    else if (event.key === "Escape" && !document.fullscreenElement) closeEventSlideshow();
-  };
-  state.onVisibility = () => {
-    const button = document.querySelector("#publicSlideshowPlay");
-    if (document.hidden) {
-      state.pausedBeforeHidden = state.paused;
-      state.paused = true;
-    } else {
-      state.paused = Boolean(state.pausedBeforeHidden);
-      if (button) button.textContent = state.paused ? "เล่นต่อ" : "พักภาพ";
-      revealPublicSlideshowControls();
-    }
-  };
-  state.onFullscreenChange = () => {
-    const button = document.querySelector("#publicSlideshowFullscreen");
-    if (button) button.textContent = document.fullscreenElement ? "ออกจากเต็มจอ" : "เต็มจอ";
-  };
-  document.addEventListener("keydown", state.onKeyDown);
-  document.addEventListener("visibilitychange", state.onVisibility);
-  document.addEventListener("fullscreenchange", state.onFullscreenChange);
   state.slideTimer = setInterval(() => { if (publicSlideshowState === state && !state.paused) stepPublicSlideshow(1); }, state.interval);
   const reveal = () => revealPublicSlideshowControls();
   overlay.addEventListener("pointermove", reveal, { passive: true });
@@ -617,9 +582,6 @@ function closeEventSlideshow() {
   if (publicSlideshowState) {
     clearInterval(publicSlideshowState.slideTimer);
     clearTimeout(publicSlideshowState.hideTimer);
-    document.removeEventListener("keydown", publicSlideshowState.onKeyDown);
-    document.removeEventListener("visibilitychange", publicSlideshowState.onVisibility);
-    document.removeEventListener("fullscreenchange", publicSlideshowState.onFullscreenChange);
     publicSlideshowState = null;
   }
   document.querySelector("#publicSlideshow")?.remove();
@@ -670,11 +632,8 @@ async function showPublicSlideshowPhoto(index) {
   next.classList.add("is-active");
   active.classList.remove("is-active");
   stage.dataset.transition = state.transition;
-  stage.style.setProperty("--slideshow-backdrop", `url(${JSON.stringify(imageUrl)})`);
   state.index = galleryPhotos.findIndex(item => item.id === photo.id);
   state.photoId = photo.id;
-  const counter = document.querySelector("#publicSlideshowCounter");
-  if (counter) counter.textContent = `${state.index + 1} / ${galleryPhotos.length} รูป`;
   const empty = document.querySelector("#publicSlideshowEmpty");
   if (empty) empty.hidden = true;
 }
