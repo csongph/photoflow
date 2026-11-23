@@ -529,8 +529,11 @@ function startEventSlideshow() {
       <img class="public-slideshow-image" id="publicSlideshowImageB" alt="ภาพจากงาน" aria-hidden="true">
       <div class="public-slideshow-empty" id="publicSlideshowEmpty">กำลังรอรูปภาพจากงานนี้…</div>
     </div>
-    <header class="public-slideshow-heading"><span>CS.BXXM STUDIO</span><strong>${escapeHtml(galleryMeta.eventName)}</strong></header>
-    <aside class="public-slideshow-qr"><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกน QR Code เพื่อดาวน์โหลดรูปภาพ</b></aside>
+    <aside class="public-slideshow-rail">
+      <header class="public-slideshow-heading"><span>CS.BXXM STUDIO</span><strong>${escapeHtml(galleryMeta.eventName)}</strong></header>
+      <div class="public-slideshow-qr"><p>เปิดแกลเลอรีรูปภาพ</p><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกนเพื่อดูและดาวน์โหลดรูป</b></div>
+      <small class="public-slideshow-rail-note">LIVE PHOTO GALLERY</small>
+    </aside>
     <div class="public-slideshow-controls" id="publicSlideshowControls">
       <button type="button" onclick="closeEventSlideshow()">กลับแกลเลอรี</button>
       <button type="button" onclick="togglePublicSlideshowPlayback()" id="publicSlideshowPlay">พักภาพ</button>
