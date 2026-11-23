@@ -989,7 +989,7 @@ body.slideshow-is-open { overflow: hidden; }
 .public-slideshow-rail { position: absolute; z-index: 3; inset: 0 0 0 auto; display: flex; width: var(--slideshow-rail-width); flex-direction: column; align-items: center; justify-content: center; gap: clamp(20px, 4vh, 40px); padding: clamp(18px, 2.4vw, 34px); border-left: 1px solid rgba(255,255,255,.1); background: linear-gradient(155deg, #111820 0%, #090c10 58%, #080a0d 100%); box-shadow: -18px 0 48px rgba(0,0,0,.26); }
 .public-slideshow-heading { position: static; z-index: auto; display: grid; gap: 7px; width: 100%; max-width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; text-align: center; }
 .public-slideshow-heading span { color: #79dfbd; font-size: 10px; font-weight: 800; letter-spacing: .14em; }
-.public-slideshow-heading strong { overflow: hidden; font-size: 17px; text-overflow: ellipsis; white-space: nowrap; }
+.public-slideshow-heading strong { display: block; overflow: visible; font-size: 17px; line-height: 1.35; overflow-wrap: anywhere; text-overflow: clip; white-space: normal; }
 .public-slideshow-qr { position: static; display: grid; justify-items: center; gap: 10px; width: 100%; padding: 15px 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px; background: rgba(255,255,255,.045); box-shadow: 0 14px 36px rgba(0,0,0,.24); text-align: center; }
 .public-slideshow-qr p { margin: 0; color: #cbd5df; font-size: 13px; font-weight: 700; }
 .public-slideshow-qr img { display: block; width: min(210px, calc(var(--slideshow-rail-width) - 76px)); height: min(210px, calc(var(--slideshow-rail-width) - 76px)); padding: 9px; border-radius: 12px; background: #fff; object-fit: contain; }
@@ -1006,7 +1006,7 @@ body.slideshow-is-open { overflow: hidden; }
   .public-slideshow-rail { inset: max(10px, env(safe-area-inset-top)) 10px auto auto; display: grid; width: min(220px, calc(100vw - 28px)); max-width: none; gap: 9px; padding: 10px; border: 1px solid rgba(255,255,255,.17); border-radius: 13px; background: rgba(7,9,12,.9); box-shadow: 0 8px 24px rgba(0,0,0,.35); backdrop-filter: blur(12px); }
   .public-slideshow-heading { gap: 4px; }
   .public-slideshow-heading span { font-size: 8px; }
-  .public-slideshow-heading strong { display: -webkit-box; overflow: visible; font-size: 12px; line-height: 1.35; text-overflow: clip; white-space: normal; overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+  .public-slideshow-heading strong { font-size: 12px; }
   .public-slideshow-qr { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
   .public-slideshow-qr p { font-size: 9px; }
   .public-slideshow-qr img { width: min(92px, 26vw); height: min(92px, 26vw); padding: 5px; }
