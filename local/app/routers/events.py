@@ -206,7 +206,20 @@ def event_preflight(db: Session, event: Event) -> dict:
             if exists:
                 try:
                     with Image.open(frame_path) as frame_image:
+                        frame_image.verify()
+                    with Image.open(frame_path) as frame_image:
                         frame_details = f" · {frame_image.width} × {frame_image.height} px"
+                        if frame_image.format != "PNG":
+                            exists = False
+                            frame_details += " · ไฟล์ไม่ใช่ PNG"
+                        detected_orientation = "landscape" if frame_image.width >= frame_image.height else "portrait"
+                        has_transparency = "A" in frame_image.getbands() and frame_image.getchannel("A").getextrema()[0] < 255
+                        if exists and detected_orientation != orientation:
+                            exists = False
+                            frame_details += " · ทิศทางไม่ตรงกับช่อง"
+                        elif exists and not has_transparency:
+                            exists = False
+                            frame_details += " · ไม่มีพื้นหลังโปร่งใส"
                 except Exception:
                     exists = False
                     frame_details = " · เปิดไฟล์ไม่ได้"
