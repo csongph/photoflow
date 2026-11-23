@@ -976,7 +976,7 @@ button {
 
 /* Customer facing live slideshow; controls disappear when the screen is idle. */
 body.slideshow-is-open { overflow: hidden; }
-.public-slideshow { --slideshow-rail-width: clamp(250px, 16vw, 320px); position: fixed; inset: 0; z-index: 5000; overflow: hidden; color: #fff; background: #050607; }
+.public-slideshow { --slideshow-rail-width: clamp(230px, 14vw, 290px); position: fixed; inset: 0; z-index: 5000; overflow: hidden; color: #fff; background: #050607; }
 .public-slideshow-stage { position: absolute; inset: 0 var(--slideshow-rail-width) 0 0; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at center, #171b20, #050607 74%); }
 .public-slideshow-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; opacity: 0; transform: scale(1.01); transition: opacity .8s ease, transform .8s ease, filter .8s ease; }
 .public-slideshow-image.is-active { opacity: 1; transform: scale(1); }
@@ -986,17 +986,17 @@ body.slideshow-is-open { overflow: hidden; }
 .public-slideshow-stage[data-transition="dissolve"] .public-slideshow-image.is-active { filter: blur(0); }
 .public-slideshow-empty { position: absolute; inset: 50% auto auto 50%; width: min(90vw, 620px); transform: translate(-50%, -50%); color: #e7edf3; font-size: clamp(18px, 3vw, 32px); text-align: center; }
 .public-slideshow-empty[hidden] { display: none; }
-.public-slideshow-rail { position: absolute; z-index: 3; inset: 0 0 0 auto; display: flex; box-sizing: border-box; width: var(--slideshow-rail-width); min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: clamp(20px, 4vh, 40px); padding: clamp(18px, 2.4vw, 34px); border-left: 1px solid rgba(255,255,255,.1); background: linear-gradient(155deg, #111820 0%, #090c10 58%, #080a0d 100%); box-shadow: -18px 0 48px rgba(0,0,0,.26); }
+.public-slideshow-rail { position: absolute; z-index: 3; inset: 0 0 0 auto; display: flex; box-sizing: border-box; width: var(--slideshow-rail-width); min-width: 0; flex-direction: column; align-items: center; justify-content: center; gap: clamp(18px, 3.5vh, 32px); padding: clamp(16px, 1.8vw, 26px); border-left: 1px solid rgba(255,255,255,.1); background: linear-gradient(155deg, #111820 0%, #090c10 58%, #080a0d 100%); box-shadow: -18px 0 48px rgba(0,0,0,.26); }
 .public-slideshow-heading { position: static; z-index: auto; display: grid; justify-items: center; gap: 8px; width: 100%; min-width: 0; max-width: 100%; padding: 0; border: 0; border-radius: 0; background: transparent; backdrop-filter: none; text-align: center; }
-.public-slideshow-brand { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.public-slideshow-brand { display: flex; align-items: center; justify-content: center; gap: 8px; padding-bottom: 11px; border-bottom: 1px solid rgba(255,255,255,.1); }
 .public-slideshow-brand strong { color: #f5f8fb; font-size: 19px; font-weight: 800; letter-spacing: .035em; }
 .public-slideshow-brand span { padding: 4px 7px; border: 1px solid rgba(121,223,189,.36); border-radius: 6px; background: rgba(121,223,189,.08); color: #79dfbd; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
-.public-slideshow-brand-tagline { margin: 0; color: #81909e; font-size: 8px; font-weight: 700; letter-spacing: .17em; }
-.public-slideshow-heading h2 { display: block; max-width: 100%; margin: 4px 0 0; color: #f5f7fa; font-size: 16px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
-.public-slideshow-qr { position: static; display: grid; justify-items: center; gap: 10px; box-sizing: border-box; width: min(100%, 250px); min-width: 0; max-width: 100%; overflow: hidden; padding: 15px 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px; background: rgba(255,255,255,.045); box-shadow: 0 14px 36px rgba(0,0,0,.24); text-align: center; }
-.public-slideshow-qr p { margin: 0; color: #cbd5df; font-size: 13px; font-weight: 700; }
-.public-slideshow-qr img { display: block; box-sizing: border-box; width: min(190px, 100%); max-width: 100%; height: auto; aspect-ratio: 1; padding: 9px; border-radius: 12px; background: #fff; object-fit: contain; }
-.public-slideshow-qr b { font-size: 13px; line-height: 1.5; }
+.public-slideshow-brand-tagline { margin: 0; color: #81909e; font-size: 8px; font-weight: 700; letter-spacing: .15em; }
+.public-slideshow-heading h2 { display: block; max-width: 100%; margin: 2px 0 0; color: #f5f7fa; font-size: 16px; font-weight: 700; line-height: 1.4; overflow-wrap: anywhere; }
+.public-slideshow-qr { position: static; display: grid; justify-items: center; gap: 11px; box-sizing: border-box; width: 100%; min-width: 0; max-width: 230px; overflow: hidden; padding: 16px 12px; border: 1px solid rgba(255,255,255,.13); border-radius: 18px; background: linear-gradient(145deg, rgba(255,255,255,.07), rgba(255,255,255,.025)); box-shadow: 0 14px 36px rgba(0,0,0,.24); text-align: center; }
+.public-slideshow-qr p { margin: 0; color: #79dfbd; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.public-slideshow-qr img { display: block; box-sizing: border-box; width: min(176px, 100%); max-width: 100%; height: auto; aspect-ratio: 1; padding: 9px; border-radius: 12px; background: #fff; object-fit: contain; }
+.public-slideshow-qr b { color: #dce4eb; font-size: 12px; font-weight: 600; line-height: 1.5; }
 .public-slideshow-rail-note { color: #7e8b99; font-size: 9px; font-weight: 800; letter-spacing: .18em; }
 .public-slideshow-controls { position: absolute; z-index: 4; left: calc((100vw - var(--slideshow-rail-width)) / 2); bottom: max(18px, env(safe-area-inset-bottom)); display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 8px; width: max-content; max-width: calc(100vw - var(--slideshow-rail-width) - 24px); padding: 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 16px; background: rgba(5,7,10,.84); box-shadow: 0 12px 36px rgba(0,0,0,.4); backdrop-filter: blur(14px); transform: translate(-50%, 0); opacity: 1; transition: opacity .25s ease, transform .25s ease; }
 .public-slideshow-controls button, .public-slideshow-controls select { min-height: 40px; padding: 8px 12px; color: #fff; border: 1px solid rgba(255,255,255,.15); border-radius: 9px; background: #18212a; font: inherit; }

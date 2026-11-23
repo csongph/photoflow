@@ -531,7 +531,7 @@ function startEventSlideshow() {
     </div>
     <aside class="public-slideshow-rail">
       <header class="public-slideshow-heading"><div class="public-slideshow-brand"><strong>CS.BXXM</strong><span>STUDIO</span></div><p class="public-slideshow-brand-tagline">PHOTO BOOTH · EVENT GALLERY</p><h2>${escapeHtml(galleryMeta.eventName)}</h2></header>
-      <div class="public-slideshow-qr"><p>เปิดแกลเลอรีรูปภาพ</p><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกนเพื่อดูและดาวน์โหลดรูป</b></div>
+      <div class="public-slideshow-qr"><p>GUEST PHOTO GALLERY</p><img src="${escapeHtml(`${API}/api/gallery/${publicId}/qr.png`)}" alt="QR Code เปิดแกลเลอรีงานนี้"><b>สแกนเพื่อดูและดาวน์โหลดรูป</b></div>
       <small class="public-slideshow-rail-note">LIVE PHOTO GALLERY</small>
     </aside>
     <div class="public-slideshow-controls" id="publicSlideshowControls">
