@@ -1017,6 +1017,23 @@ body.slideshow-is-open { overflow: hidden; }
   .public-slideshow-controls label { font-size: 10px; }
 }
 
+/* Portrait displays are often narrow TV windows or phone previews with a
+   larger CSS viewport/zoom. Key this layout to orientation as well as width. */
+@media (orientation: portrait) {
+  .public-slideshow { --slideshow-rail-width: 0px; }
+  .public-slideshow-stage { inset: 0; }
+  .public-slideshow-rail { inset: max(10px, env(safe-area-inset-top)) 10px auto auto; display: grid; box-sizing: border-box; width: min(196px, 44vw); max-width: none; gap: 7px; padding: 9px; border: 1px solid rgba(255,255,255,.2); border-radius: 14px; background: rgba(7,9,12,.78); box-shadow: 0 8px 24px rgba(0,0,0,.3); backdrop-filter: blur(10px); }
+  .public-slideshow-heading { gap: 3px; }
+  .public-slideshow-heading span { font-size: 8px; }
+  .public-slideshow-heading strong { font-size: 11px; }
+  .public-slideshow-qr { gap: 4px; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+  .public-slideshow-qr p { font-size: 9px; }
+  .public-slideshow-qr img { width: min(84px, 22vw); height: min(84px, 22vw); padding: 5px; }
+  .public-slideshow-qr b { font-size: 8px; }
+  .public-slideshow-rail-note { display: none; }
+  .public-slideshow-controls { left: 50%; max-width: calc(100vw - 16px); }
+}
+
 @media (min-width: 641px) and (max-height: 560px) {
   .public-slideshow-rail { flex-direction: row; gap: 16px; padding: 14px; }
   .public-slideshow-qr { width: auto; padding: 8px; }
