@@ -183,9 +183,12 @@ def event_preflight(db: Session, event: Event) -> dict:
     checks.append({"key": "incoming_folder", "ok": incoming.exists(), "required": True, "message": str(incoming)})
     if incoming.exists():
         try:
-            probe = incoming / ".momentlink_preflight"
-            probe.write_text("ok", encoding="utf-8")
-            probe.unlink(missing_ok=True)
+            probe = incoming / f".momentlink_preflight_{secrets.token_hex(8)}"
+            try:
+                with probe.open("x", encoding="utf-8") as handle:
+                    handle.write("ok")
+            finally:
+                probe.unlink(missing_ok=True)
             checks.append({"key": "incoming_writable", "ok": True, "required": True, "message": "INCOMING is writable"})
         except OSError as exc:
             checks.append({"key": "incoming_writable", "ok": False, "required": True, "message": str(exc)})

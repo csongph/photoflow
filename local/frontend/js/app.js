@@ -766,14 +766,13 @@ async function uploadFrameToExistingEvent(eventId) {
       const result = await uploadPhotoboothFrame(eventId, file, frame.orientation);
       if (!result.ok || result.orientation !== frame.orientation) throw new Error("เซิร์ฟเวอร์ยืนยันการบันทึกกรอบไม่ได้");
       const preflight = await api(`/api/events/${eventId}/preflight`);
-      const frameChecks = preflight.checks.filter(check => check.key.startsWith("photobooth_frame_"));
-      const failed = frameChecks.filter(check => !check.ok);
-      const reprocessed = failed.length === 0
+      const blocked = preflight.failed.filter(check => check.required);
+      const reprocessed = preflight.ok
         ? await api(`/api/events/${eventId}/photos/reprocess`, { method: "POST" })
         : null;
       await renderEvents();
       const savedOrientation = frame.orientation === "portrait" ? "แนวตั้ง" : "แนวนอน";
-      alert(`อัปโหลดกรอบ${savedOrientation} "${file.name}" เข้าอีเวนต์นี้แล้ว${failed.length ? `\n\nยังต้องอัปโหลดเพิ่ม:\n${failed.map(check => `- ${check.message}`).join("\n")}` : `\n\nกรอบครบทั้งสองแนวแล้ว ส่งรูปเดิม ${reprocessed.queued} รูปไปประมวลผลใหม่`}`);
+      alert(`อัปโหลดกรอบ${savedOrientation} "${file.name}" เข้าอีเวนต์นี้แล้ว${blocked.length ? `\n\nยังเริ่มงานไม่ได้:\n${blocked.map(check => `- ${check.message}`).join("\n")}` : `\n\nตรวจความพร้อมผ่านแล้ว ส่งรูปเดิม ${reprocessed.queued} รูปไปประมวลผลใหม่`}`);
     } catch (error) {
       alert(`อัปโหลดกรอบไม่สำเร็จ\n\n${error.message || error}`);
     }
