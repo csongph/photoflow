@@ -715,7 +715,7 @@ async function retryPhotoboothFrame(eventId) {
 
 async function renderEvents() {
   const events = await api("/api/events");
-  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${html(e.name)}<br><small class="muted">${html(e.status)}</small></span><span class="row"><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>เริ่มงาน</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
+  $("#eventsList").innerHTML = events.map(e => `<div class="queue-line"><span>${html(e.name)}<br><small class="muted">${html(e.status)}</small></span><span class="row"><button class="secondary" onclick='uploadFrameToExistingEvent(${jsArg(e.id)})'>อัปโหลดกรอบ</button><button class="secondary" onclick='checkPreflightFromList(${jsArg(e.id)})'>Check</button><button onclick='startEvent(${jsArg(e.id)})'>เริ่มงาน</button><button class="bad" onclick='deleteEvent(${jsArg(e.id)}, ${jsArg(e.name)}, true, "events")'>Delete</button></span></div>`).join("") || `<div class="empty-state"><b>ยังไม่มีอีเวนต์ในฐานข้อมูล</b><br><span>กด Import Local Events เพื่อดึงงานจากโฟลเดอร์ในเครื่องกลับเข้าระบบ</span></div>`;
 }
 
 async function loadImportableEvents() {
@@ -738,7 +738,34 @@ async function importLocalEvent(eventFolder, returnTo = "events") {
 
 async function checkPreflightFromList(id) {
   const data = await api(`/api/events/${id}/preflight`);
-  alert(data.ok ? "Preflight ผ่าน พร้อมเริ่มงาน" : `ยังไม่พร้อม: ${data.failed.map(x => x.key).join(", ")}`);
+  alert(data.ok ? "ตรวจครบแล้ว พร้อมเริ่มงาน" : `ยังไม่พร้อม:\n\n${data.failed.map(x => `- ${checkLabels[x.key] || x.key}: ${x.message}`).join("\n")}`);
+}
+
+async function uploadFrameToExistingEvent(eventId) {
+  const picker = document.createElement("input");
+  picker.type = "file";
+  picker.accept = "image/png,.png";
+  picker.onchange = async () => {
+    const file = picker.files?.[0];
+    if (!file) return;
+    try {
+      const frame = await inspectPhotoboothFrame(file);
+      const result = await uploadPhotoboothFrame(eventId, file, frame.orientation);
+      if (!result.ok || result.orientation !== frame.orientation) throw new Error("เซิร์ฟเวอร์ยืนยันการบันทึกกรอบไม่ได้");
+      const preflight = await api(`/api/events/${eventId}/preflight`);
+      const frameChecks = preflight.checks.filter(check => check.key.startsWith("photobooth_frame_"));
+      const failed = frameChecks.filter(check => !check.ok);
+      const reprocessed = failed.length === 0
+        ? await api(`/api/events/${eventId}/photos/reprocess`, { method: "POST" })
+        : null;
+      await renderEvents();
+      const savedOrientation = frame.orientation === "portrait" ? "แนวตั้ง" : "แนวนอน";
+      alert(`อัปโหลดกรอบ${savedOrientation} "${file.name}" เข้าอีเวนต์นี้แล้ว${failed.length ? `\n\nยังต้องอัปโหลดเพิ่ม:\n${failed.map(check => `- ${check.message}`).join("\n")}` : `\n\nกรอบครบทั้งสองแนวแล้ว ส่งรูปเดิม ${reprocessed.queued} รูปไปประมวลผลใหม่`}`);
+    } catch (error) {
+      alert(`อัปโหลดกรอบไม่สำเร็จ\n\n${error.message || error}`);
+    }
+  };
+  picker.click();
 }
 
 async function createEvent(ev) {
