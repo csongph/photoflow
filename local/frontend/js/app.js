@@ -419,7 +419,20 @@ async function endEvent(id) { if (confirm("End this event and stop watching INCO
 async function deleteEvent(id, name, allowFiles = true, returnTo = "events") {
   if (!confirm(`ลบอีเวนต์ "${name}" ออกจากฐานข้อมูล?\n\nรูปและโฟลเดอร์งานจะยังอยู่ในเครื่อง ถ้ายังไม่เลือกขั้นถัดไป`)) return;
   const deleteFiles = allowFiles && confirm("ต้องการลบโฟลเดอร์รูปของอีเวนต์นี้ออกจากเครื่องด้วยไหม?\n\nกด Cancel ถ้าต้องการลบเฉพาะข้อมูลในระบบ แต่เก็บไฟล์รูปไว้");
-  const result = await api(`/api/events/${id}?delete_files=${deleteFiles ? "true" : "false"}`, { method: "DELETE" });
+  let result;
+  try {
+    result = await api(`/api/events/${id}?delete_files=${deleteFiles ? "true" : "false"}`, { method: "DELETE" });
+  } catch (error) {
+    if (/404|Event not found/i.test(error.message || "")) {
+      alert("อีเวนต์นี้ไม่มีในฐานข้อมูลปัจจุบันแล้ว รายการอาจมาจากหน้าเก่าที่ค้างอยู่ กำลังโหลดรายการใหม่");
+      if (returnTo === "dashboard") await loadDashboard();
+      else if (returnTo === "archive") await loadArchive();
+      else await renderEvents();
+      return;
+    }
+    alert(`ลบอีเวนต์ไม่สำเร็จ\n\n${error.message || error}`);
+    return;
+  }
   const detail = result.warning ? `\n\n${result.warning}` : deleteFiles ? "\n\nลบโฟลเดอร์งานแล้ว" : "\n\nเก็บโฟลเดอร์รูปไว้ในเครื่อง";
   alert(`ลบอีเวนต์แล้ว${detail}`);
   if (returnTo === "dashboard") location.href = "/";
